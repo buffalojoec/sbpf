@@ -4131,7 +4131,7 @@ fn test_err_div_by_zero_imm() {
     let mut prog = [0u8; 16];
     prog[0] = ebpf::DIV64_IMM;
     prog[1] = 0x00; // dst=r0
-    // imm at bytes 4..8, left as 0
+                    // imm at bytes 4..8, left as 0
     prog[8] = ebpf::EXIT;
     let config = Config {
         enabled_sbpf_versions: SBPFVersion::V0..=SBPFVersion::V0,
