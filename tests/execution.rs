@@ -3905,3 +3905,98 @@ fn test_stack_gaps() {
         ProgramResult::Ok(77),
     );
 }
+
+// Hardening: invalid register indices
+
+#[test]
+fn test_err_invalid_reg_dst() {
+    // Construct a MOV64_IMM instruction with dst=15 (invalid, max valid is 10)
+    let mut prog = [0u8; 24];
+    prog[0] = ebpf::ADD64_IMM;
+    prog[1] = 10; // dst=10
+    prog[8] = ebpf::MOV64_IMM;
+    prog[9] = 0x0f; // dst=15, src=0
+    LittleEndian::write_i32(&mut prog[12..], 42);
+    prog[16] = ebpf::EXIT;
+    let config = Config {
+        enable_register_tracing: true,
+        ..Config::default()
+    };
+    let loader = Arc::new(BuiltinProgram::new_loader(config));
+    let mut executable = Executable::<TestContextObject>::from_text_bytes(
+        &prog,
+        loader.clone(),
+        SBPFVersion::V0,
+        FunctionRegistry::default(),
+    )
+    .unwrap();
+
+    // Interpreter: should return InvalidInstruction
+    {
+        let mut context_object = TestContextObject::new(3);
+        create_vm!(
+            vm,
+            &executable,
+            &mut context_object,
+            stack,
+            heap,
+            vec![],
+            None
+        );
+        let (_instruction_count, result) = vm.execute_program(&executable, true);
+        assert_error!(result, "InvalidInstruction");
+    }
+
+    // JIT: should return InvalidInstruction at compile time
+    #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
+    {
+        let result = executable.jit_compile();
+        assert_error!(result, "InvalidInstruction");
+    }
+}
+
+#[test]
+fn test_err_invalid_reg_src() {
+    // Construct a MOV64_REG instruction with src=15 (invalid)
+    let mut prog = [0u8; 24];
+    prog[0] = ebpf::ADD64_IMM;
+    prog[1] = 10; // dst=10
+    prog[8] = ebpf::MOV64_REG;
+    prog[9] = 0xf0; // dst=0, src=15
+    prog[16] = ebpf::EXIT;
+    let config = Config {
+        enable_register_tracing: true,
+        ..Config::default()
+    };
+    let loader = Arc::new(BuiltinProgram::new_loader(config));
+    let mut executable = Executable::<TestContextObject>::from_text_bytes(
+        &prog,
+        loader.clone(),
+        SBPFVersion::V0,
+        FunctionRegistry::default(),
+    )
+    .unwrap();
+
+    // Interpreter: should return InvalidInstruction
+    {
+        let mut context_object = TestContextObject::new(3);
+        create_vm!(
+            vm,
+            &executable,
+            &mut context_object,
+            stack,
+            heap,
+            vec![],
+            None
+        );
+        let (_instruction_count, result) = vm.execute_program(&executable, true);
+        assert_error!(result, "InvalidInstruction");
+    }
+
+    // JIT: should return InvalidInstruction at compile time
+    #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
+    {
+        let result = executable.jit_compile();
+        assert_error!(result, "InvalidInstruction");
+    }
+}

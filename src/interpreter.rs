@@ -186,6 +186,9 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
         let mut insn = ebpf::get_insn_unchecked(self.program, self.reg[11] as usize);
         let dst = insn.dst as usize;
         let src = insn.src as usize;
+        if dst > 10 || src > 10 {
+            throw_error!(self, EbpfError::InvalidInstruction);
+        }
 
         if config.enable_register_tracing {
             self.vm.register_trace.push(self.reg);
@@ -531,7 +534,11 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                 } else if self.executable.get_sbpf_version().callx_uses_dst_reg() {
                     self.reg[dst]
                 } else {
-                    self.reg[insn.imm as usize]
+                    let imm_reg = insn.imm as usize;
+                    if imm_reg >= self.reg.len() {
+                        throw_error!(self, EbpfError::InvalidInstruction);
+                    }
+                    self.reg[imm_reg]
                 };
                 if !self.push_frame(config) {
                     return false;

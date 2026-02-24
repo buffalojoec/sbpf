@@ -444,6 +444,9 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
                 self.emit_ins(X86Instruction::load_immediate(REGISTER_SCRATCH, 0));
             }
 
+            if insn.dst as usize >= REGISTER_MAP.len() || insn.src as usize >= REGISTER_MAP.len() {
+                return Err(EbpfError::InvalidInstruction);
+            }
             let dst = REGISTER_MAP[insn.dst as usize];
             let src = REGISTER_MAP[insn.src as usize];
             let target_pc = (self.pc as isize + insn.off as isize + 1) as usize;
@@ -841,7 +844,11 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
                     } else if self.executable.get_sbpf_version().callx_uses_dst_reg() {
                         dst
                     } else {
-                        REGISTER_MAP[insn.imm as usize]
+                        let imm_reg = insn.imm as usize;
+                        if imm_reg >= REGISTER_MAP.len() {
+                            return Err(EbpfError::InvalidInstruction);
+                        }
+                        REGISTER_MAP[imm_reg]
                     };
                     self.emit_internal_call(Value::Register(target_pc));
                 },
