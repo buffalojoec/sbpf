@@ -4080,3 +4080,47 @@ fn test_err_jmp_oob_backward() {
         assert_error!(result, "InvalidInstruction");
     }
 }
+
+#[test]
+fn test_err_lddw_last_insn() {
+    // LDDW as the only instruction (no second slot for the upper 32 bits)
+    let mut prog = [0u8; 8];
+    prog[0] = ebpf::LD_DW_IMM;
+    prog[1] = 0x00; // dst=r0
+    LittleEndian::write_i32(&mut prog[4..], 42);
+    let config = Config {
+        enabled_sbpf_versions: SBPFVersion::V0..=SBPFVersion::V0,
+        ..Config::default()
+    };
+    let loader = Arc::new(BuiltinProgram::new_loader(config));
+    let mut executable = Executable::<TestContextObject>::from_text_bytes(
+        &prog,
+        loader.clone(),
+        SBPFVersion::V0,
+        FunctionRegistry::default(),
+    )
+    .unwrap();
+
+    // Interpreter: should return InvalidInstruction
+    {
+        let mut context_object = TestContextObject::new(3);
+        create_vm!(
+            vm,
+            &executable,
+            &mut context_object,
+            stack,
+            heap,
+            vec![],
+            None
+        );
+        let (_instruction_count, result) = vm.execute_program(&executable, true);
+        assert_error!(result, "InvalidInstruction");
+    }
+
+    // JIT: should return InvalidInstruction at compile time
+    #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
+    {
+        let result = executable.jit_compile();
+        assert_error!(result, "InvalidInstruction");
+    }
+}

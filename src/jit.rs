@@ -453,6 +453,9 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
 
             match insn.opc {
                 ebpf::LD_DW_IMM if !self.executable.get_sbpf_version().disable_lddw() => {
+                    if !ebpf::is_pc_in_program(self.program, self.pc + 1) {
+                        return Err(EbpfError::InvalidInstruction);
+                    }
                     self.emit_validate_and_profile_instruction_count(self.pc + 2);
                     self.pc += 1;
                     self.result.pc_section[self.pc] = unsafe { self.anchors[ANCHOR_CALL_UNSUPPORTED_INSTRUCTION].offset_from(self.result.text_section.as_ptr()) as u32 };

@@ -196,6 +196,9 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
 
         match insn.opc {
             ebpf::LD_DW_IMM if !self.executable.get_sbpf_version().disable_lddw() => {
+                if !ebpf::is_pc_in_program(self.program, self.reg[11] as usize + 1) {
+                    throw_error!(self, EbpfError::InvalidInstruction);
+                }
                 ebpf::augment_lddw_unchecked(self.program, &mut insn);
                 self.reg[dst] = insn.imm as u64;
                 self.reg[11] += 1;
