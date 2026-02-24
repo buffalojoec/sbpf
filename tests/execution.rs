@@ -4000,3 +4000,83 @@ fn test_err_invalid_reg_src() {
         assert_error!(result, "InvalidInstruction");
     }
 }
+
+#[test]
+fn test_err_jmp_oob_forward() {
+    // JA with offset=100, jumping way past end of program
+    let mut prog = [0u8; 16];
+    prog[0] = ebpf::JA;
+    LittleEndian::write_i16(&mut prog[2..], 100); // off=100, target_pc=101
+    prog[8] = ebpf::EXIT;
+    let loader = Arc::new(BuiltinProgram::new_loader(Config::default()));
+    let mut executable = Executable::<TestContextObject>::from_text_bytes(
+        &prog,
+        loader.clone(),
+        SBPFVersion::V0,
+        FunctionRegistry::default(),
+    )
+    .unwrap();
+
+    // Interpreter: should return ExecutionOverrun
+    {
+        let mut context_object = TestContextObject::new(3);
+        create_vm!(
+            vm,
+            &executable,
+            &mut context_object,
+            stack,
+            heap,
+            vec![],
+            None
+        );
+        let (_instruction_count, result) = vm.execute_program(&executable, true);
+        assert_error!(result, "ExecutionOverrun");
+    }
+
+    // JIT: should return InvalidInstruction at compile time
+    #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
+    {
+        let result = executable.jit_compile();
+        assert_error!(result, "InvalidInstruction");
+    }
+}
+
+#[test]
+fn test_err_jmp_oob_backward() {
+    // JA with offset=-5, jumping before start of program
+    let mut prog = [0u8; 16];
+    prog[0] = ebpf::JA;
+    LittleEndian::write_i16(&mut prog[2..], -5); // off=-5, wraps to huge usize
+    prog[8] = ebpf::EXIT;
+    let loader = Arc::new(BuiltinProgram::new_loader(Config::default()));
+    let mut executable = Executable::<TestContextObject>::from_text_bytes(
+        &prog,
+        loader.clone(),
+        SBPFVersion::V0,
+        FunctionRegistry::default(),
+    )
+    .unwrap();
+
+    // Interpreter: should return ExecutionOverrun
+    {
+        let mut context_object = TestContextObject::new(3);
+        create_vm!(
+            vm,
+            &executable,
+            &mut context_object,
+            stack,
+            heap,
+            vec![],
+            None
+        );
+        let (_instruction_count, result) = vm.execute_program(&executable, true);
+        assert_error!(result, "ExecutionOverrun");
+    }
+
+    // JIT: should return InvalidInstruction at compile time
+    #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
+    {
+        let result = executable.jit_compile();
+        assert_error!(result, "InvalidInstruction");
+    }
+}

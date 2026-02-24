@@ -179,7 +179,7 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
             throw_error!(self, EbpfError::ExceededMaxInstructions);
         }
         self.vm.due_insn_count += 1;
-        if self.reg[11] as usize * ebpf::INSN_SIZE >= self.program.len() {
+        if !ebpf::is_pc_in_program(self.program, self.reg[11] as usize) {
             throw_error!(self, EbpfError::ExecutionOverrun);
         }
         let mut next_pc = self.reg[11] + 1;

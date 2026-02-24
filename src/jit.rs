@@ -759,57 +759,57 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
                     ),
 
                 // BPF_JMP32 class
-                ebpf::JEQ32_IMM   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x84, false, insn.imm, dst, target_pc),
-                ebpf::JEQ32_REG   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x84, false, src, dst, target_pc),
-                ebpf::JGT32_IMM   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x87, false, insn.imm, dst, target_pc),
-                ebpf::JGT32_REG   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x87, false, src, dst, target_pc),
-                ebpf::JGE32_IMM   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x83, false, insn.imm, dst, target_pc),
-                ebpf::JGE32_REG   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x83, false, src, dst, target_pc),
-                ebpf::JLT32_IMM   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x82, false, insn.imm, dst, target_pc),
-                ebpf::JLT32_REG   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x82, false, src, dst, target_pc),
-                ebpf::JLE32_IMM   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x86, false, insn.imm, dst, target_pc),
-                ebpf::JLE32_REG   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x86, false, src, dst, target_pc),
-                ebpf::JSET32_IMM  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x85, true, insn.imm, dst, target_pc),
-                ebpf::JSET32_REG  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x85, true, src, dst, target_pc),
-                ebpf::JNE32_IMM   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x85, false, insn.imm, dst, target_pc),
-                ebpf::JNE32_REG   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x85, false, src, dst, target_pc),
-                ebpf::JSGT32_IMM  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x8f, false, insn.imm, dst, target_pc),
-                ebpf::JSGT32_REG  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x8f, false, src, dst, target_pc),
-                ebpf::JSGE32_IMM  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x8d, false, insn.imm, dst, target_pc),
-                ebpf::JSGE32_REG  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x8d, false, src, dst, target_pc),
-                ebpf::JSLT32_IMM  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x8c, false, insn.imm, dst, target_pc),
-                ebpf::JSLT32_REG  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x8c, false, src, dst, target_pc),
-                ebpf::JSLE32_IMM  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x8e, false, insn.imm, dst, target_pc),
-                ebpf::JSLE32_REG  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x8e, false, src, dst, target_pc),
+                ebpf::JEQ32_IMM   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x84, false, insn.imm, dst, target_pc)?,
+                ebpf::JEQ32_REG   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x84, false, src, dst, target_pc)?,
+                ebpf::JGT32_IMM   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x87, false, insn.imm, dst, target_pc)?,
+                ebpf::JGT32_REG   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x87, false, src, dst, target_pc)?,
+                ebpf::JGE32_IMM   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x83, false, insn.imm, dst, target_pc)?,
+                ebpf::JGE32_REG   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x83, false, src, dst, target_pc)?,
+                ebpf::JLT32_IMM   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x82, false, insn.imm, dst, target_pc)?,
+                ebpf::JLT32_REG   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x82, false, src, dst, target_pc)?,
+                ebpf::JLE32_IMM   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x86, false, insn.imm, dst, target_pc)?,
+                ebpf::JLE32_REG   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x86, false, src, dst, target_pc)?,
+                ebpf::JSET32_IMM  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x85, true, insn.imm, dst, target_pc)?,
+                ebpf::JSET32_REG  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x85, true, src, dst, target_pc)?,
+                ebpf::JNE32_IMM   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x85, false, insn.imm, dst, target_pc)?,
+                ebpf::JNE32_REG   if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x85, false, src, dst, target_pc)?,
+                ebpf::JSGT32_IMM  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x8f, false, insn.imm, dst, target_pc)?,
+                ebpf::JSGT32_REG  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x8f, false, src, dst, target_pc)?,
+                ebpf::JSGE32_IMM  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x8d, false, insn.imm, dst, target_pc)?,
+                ebpf::JSGE32_REG  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x8d, false, src, dst, target_pc)?,
+                ebpf::JSLT32_IMM  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x8c, false, insn.imm, dst, target_pc)?,
+                ebpf::JSLT32_REG  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x8c, false, src, dst, target_pc)?,
+                ebpf::JSLE32_IMM  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_imm(OperandSize::S32, 0x8e, false, insn.imm, dst, target_pc)?,
+                ebpf::JSLE32_REG  if self.executable.get_sbpf_version().enable_jmp32() => self.emit_conditional_branch_reg(OperandSize::S32, 0x8e, false, src, dst, target_pc)?,
 
                 // BPF_JMP64 class
                 ebpf::JA         => {
                     self.emit_validate_and_profile_instruction_count(target_pc);
-                    let jump_offset = self.relative_to_target_pc(target_pc, 5);
+                    let jump_offset = self.relative_to_target_pc(target_pc, 5)?;
                     self.emit_ins(X86Instruction::jump_immediate(jump_offset));
                 },
-                ebpf::JEQ64_IMM    => self.emit_conditional_branch_imm(OperandSize::S64, 0x84, false, insn.imm, dst, target_pc),
-                ebpf::JEQ64_REG    => self.emit_conditional_branch_reg(OperandSize::S64, 0x84, false, src, dst, target_pc),
-                ebpf::JGT64_IMM    => self.emit_conditional_branch_imm(OperandSize::S64, 0x87, false, insn.imm, dst, target_pc),
-                ebpf::JGT64_REG    => self.emit_conditional_branch_reg(OperandSize::S64, 0x87, false, src, dst, target_pc),
-                ebpf::JGE64_IMM    => self.emit_conditional_branch_imm(OperandSize::S64, 0x83, false, insn.imm, dst, target_pc),
-                ebpf::JGE64_REG    => self.emit_conditional_branch_reg(OperandSize::S64, 0x83, false, src, dst, target_pc),
-                ebpf::JLT64_IMM    => self.emit_conditional_branch_imm(OperandSize::S64, 0x82, false, insn.imm, dst, target_pc),
-                ebpf::JLT64_REG    => self.emit_conditional_branch_reg(OperandSize::S64, 0x82, false, src, dst, target_pc),
-                ebpf::JLE64_IMM    => self.emit_conditional_branch_imm(OperandSize::S64, 0x86, false, insn.imm, dst, target_pc),
-                ebpf::JLE64_REG    => self.emit_conditional_branch_reg(OperandSize::S64, 0x86, false, src, dst, target_pc),
-                ebpf::JSET64_IMM   => self.emit_conditional_branch_imm(OperandSize::S64, 0x85, true, insn.imm, dst, target_pc),
-                ebpf::JSET64_REG   => self.emit_conditional_branch_reg(OperandSize::S64, 0x85, true, src, dst, target_pc),
-                ebpf::JNE64_IMM    => self.emit_conditional_branch_imm(OperandSize::S64, 0x85, false, insn.imm, dst, target_pc),
-                ebpf::JNE64_REG    => self.emit_conditional_branch_reg(OperandSize::S64, 0x85, false, src, dst, target_pc),
-                ebpf::JSGT64_IMM   => self.emit_conditional_branch_imm(OperandSize::S64, 0x8f, false, insn.imm, dst, target_pc),
-                ebpf::JSGT64_REG   => self.emit_conditional_branch_reg(OperandSize::S64, 0x8f, false, src, dst, target_pc),
-                ebpf::JSGE64_IMM   => self.emit_conditional_branch_imm(OperandSize::S64, 0x8d, false, insn.imm, dst, target_pc),
-                ebpf::JSGE64_REG   => self.emit_conditional_branch_reg(OperandSize::S64, 0x8d, false, src, dst, target_pc),
-                ebpf::JSLT64_IMM   => self.emit_conditional_branch_imm(OperandSize::S64, 0x8c, false, insn.imm, dst, target_pc),
-                ebpf::JSLT64_REG   => self.emit_conditional_branch_reg(OperandSize::S64, 0x8c, false, src, dst, target_pc),
-                ebpf::JSLE64_IMM   => self.emit_conditional_branch_imm(OperandSize::S64, 0x8e, false, insn.imm, dst, target_pc),
-                ebpf::JSLE64_REG   => self.emit_conditional_branch_reg(OperandSize::S64, 0x8e, false, src, dst, target_pc),
+                ebpf::JEQ64_IMM    => self.emit_conditional_branch_imm(OperandSize::S64, 0x84, false, insn.imm, dst, target_pc)?,
+                ebpf::JEQ64_REG    => self.emit_conditional_branch_reg(OperandSize::S64, 0x84, false, src, dst, target_pc)?,
+                ebpf::JGT64_IMM    => self.emit_conditional_branch_imm(OperandSize::S64, 0x87, false, insn.imm, dst, target_pc)?,
+                ebpf::JGT64_REG    => self.emit_conditional_branch_reg(OperandSize::S64, 0x87, false, src, dst, target_pc)?,
+                ebpf::JGE64_IMM    => self.emit_conditional_branch_imm(OperandSize::S64, 0x83, false, insn.imm, dst, target_pc)?,
+                ebpf::JGE64_REG    => self.emit_conditional_branch_reg(OperandSize::S64, 0x83, false, src, dst, target_pc)?,
+                ebpf::JLT64_IMM    => self.emit_conditional_branch_imm(OperandSize::S64, 0x82, false, insn.imm, dst, target_pc)?,
+                ebpf::JLT64_REG    => self.emit_conditional_branch_reg(OperandSize::S64, 0x82, false, src, dst, target_pc)?,
+                ebpf::JLE64_IMM    => self.emit_conditional_branch_imm(OperandSize::S64, 0x86, false, insn.imm, dst, target_pc)?,
+                ebpf::JLE64_REG    => self.emit_conditional_branch_reg(OperandSize::S64, 0x86, false, src, dst, target_pc)?,
+                ebpf::JSET64_IMM   => self.emit_conditional_branch_imm(OperandSize::S64, 0x85, true, insn.imm, dst, target_pc)?,
+                ebpf::JSET64_REG   => self.emit_conditional_branch_reg(OperandSize::S64, 0x85, true, src, dst, target_pc)?,
+                ebpf::JNE64_IMM    => self.emit_conditional_branch_imm(OperandSize::S64, 0x85, false, insn.imm, dst, target_pc)?,
+                ebpf::JNE64_REG    => self.emit_conditional_branch_reg(OperandSize::S64, 0x85, false, src, dst, target_pc)?,
+                ebpf::JSGT64_IMM   => self.emit_conditional_branch_imm(OperandSize::S64, 0x8f, false, insn.imm, dst, target_pc)?,
+                ebpf::JSGT64_REG   => self.emit_conditional_branch_reg(OperandSize::S64, 0x8f, false, src, dst, target_pc)?,
+                ebpf::JSGE64_IMM   => self.emit_conditional_branch_imm(OperandSize::S64, 0x8d, false, insn.imm, dst, target_pc)?,
+                ebpf::JSGE64_REG   => self.emit_conditional_branch_reg(OperandSize::S64, 0x8d, false, src, dst, target_pc)?,
+                ebpf::JSLT64_IMM   => self.emit_conditional_branch_imm(OperandSize::S64, 0x8c, false, insn.imm, dst, target_pc)?,
+                ebpf::JSLT64_REG   => self.emit_conditional_branch_reg(OperandSize::S64, 0x8c, false, src, dst, target_pc)?,
+                ebpf::JSLE64_IMM   => self.emit_conditional_branch_imm(OperandSize::S64, 0x8e, false, insn.imm, dst, target_pc)?,
+                ebpf::JSLE64_REG   => self.emit_conditional_branch_reg(OperandSize::S64, 0x8e, false, src, dst, target_pc)?,
                 ebpf::CALL_IMM     => {
                     let mut resolved = false;
                     // External syscall
@@ -823,14 +823,14 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
                     if self.executable.get_sbpf_version().static_syscalls() {
                         let target_pc = (self.pc as i64).saturating_add(insn.imm).saturating_add(1);
                         if ebpf::is_pc_in_program(self.program, target_pc as usize) && insn.src == 1 {
-                            self.emit_internal_call(Value::Constant64(target_pc as i64, true));
+                            self.emit_internal_call(Value::Constant64(target_pc as i64, true))?;
                             resolved = true;
                         }
                     } else if let Some((_function_name, target_pc)) =
                         self.executable
                             .get_function_registry()
                             .lookup_by_key(insn.imm as u32) {
-                        self.emit_internal_call(Value::Constant64(target_pc as i64, true));
+                        self.emit_internal_call(Value::Constant64(target_pc as i64, true))?;
                         resolved = true;
                     }
                     if !resolved {
@@ -850,7 +850,7 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
                         }
                         REGISTER_MAP[imm_reg]
                     };
-                    self.emit_internal_call(Value::Register(target_pc));
+                    self.emit_internal_call(Value::Register(target_pc))?;
                 },
                 ebpf::EXIT      => {
                     self.emit_validate_and_profile_instruction_count(0);
@@ -1133,7 +1133,7 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
         }
     }
 
-    fn emit_internal_call(&mut self, dst: Value) {
+    fn emit_internal_call(&mut self, dst: Value) -> Result<(), EbpfError> {
         // Store PC in case the bounds check fails
         self.emit_ins(X86Instruction::load_immediate(REGISTER_SCRATCH, self.pc as i64));
         self.last_instruction_meter_validation_pc = self.pc;
@@ -1156,7 +1156,7 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
                 } else {
                     self.emit_ins(X86Instruction::load_immediate(REGISTER_SCRATCH, target_pc));
                 }
-                let jump_offset = self.relative_to_target_pc(target_pc as usize, 5);
+                let jump_offset = self.relative_to_target_pc(target_pc as usize, 5)?;
                 self.emit_ins(X86Instruction::call_immediate(jump_offset));
             },
             _ => {
@@ -1172,6 +1172,7 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
         for reg in REGISTER_MAP.iter().skip(FIRST_SCRATCH_REG).take(SCRATCH_REGS).rev() {
             self.emit_ins(X86Instruction::pop(*reg));
         }
+        Ok(())
     }
 
     /// Emits a syscall handler invocation
@@ -1249,19 +1250,20 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
         }
     }
 
-    fn emit_conditional_branch_reg(&mut self, size: OperandSize, op: u8, bitwise: bool, first_operand: X86Register, second_operand: X86Register, target_pc: usize) {
+    fn emit_conditional_branch_reg(&mut self, size: OperandSize, op: u8, bitwise: bool, first_operand: X86Register, second_operand: X86Register, target_pc: usize) -> Result<(), EbpfError> {
         self.emit_validate_and_profile_instruction_count(target_pc);
         if bitwise { // Logical
             self.emit_ins(X86Instruction::test(size, first_operand, second_operand, None));
         } else { // Arithmetic
             self.emit_ins(X86Instruction::cmp(size, first_operand, second_operand, None));
         }
-        let jump_offset = self.relative_to_target_pc(target_pc, 6);
+        let jump_offset = self.relative_to_target_pc(target_pc, 6)?;
         self.emit_ins(X86Instruction::conditional_jump_immediate(op, jump_offset));
         self.emit_undo_profile_instruction_count(target_pc);
+        Ok(())
     }
 
-    fn emit_conditional_branch_imm(&mut self, size: OperandSize, op: u8, bitwise: bool, immediate: i64, second_operand: X86Register, target_pc: usize) {
+    fn emit_conditional_branch_imm(&mut self, size: OperandSize, op: u8, bitwise: bool, immediate: i64, second_operand: X86Register, target_pc: usize) -> Result<(), EbpfError> {
         self.emit_validate_and_profile_instruction_count(target_pc);
         if self.should_sanitize_constant(immediate) {
             self.emit_sanitized_load_immediate(REGISTER_SCRATCH, immediate);
@@ -1275,9 +1277,10 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
         } else { // Arithmetic
             self.emit_ins(X86Instruction::cmp_immediate(size, second_operand, immediate, None));
         }
-        let jump_offset = self.relative_to_target_pc(target_pc, 6);
+        let jump_offset = self.relative_to_target_pc(target_pc, 6)?;
         self.emit_ins(X86Instruction::conditional_jump_immediate(op, jump_offset));
         self.emit_undo_profile_instruction_count(target_pc);
+        Ok(())
     }
 
     fn emit_shift(&mut self, size: OperandSize, opcode_extension: u8, source: X86Register, destination: X86Register, immediate: Option<i64>) {
@@ -1694,7 +1697,10 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
         (unsafe { destination.offset_from(instruction_end) } as i32) // Relative jump
     }
 
-    fn relative_to_target_pc(&mut self, target_pc: usize, instruction_length: usize) -> i32 {
+    fn relative_to_target_pc(&mut self, target_pc: usize, instruction_length: usize) -> Result<i32, EbpfError> {
+        if target_pc >= self.result.pc_section.len() {
+            return Err(EbpfError::InvalidInstruction);
+        }
         let instruction_end = unsafe { self.result.text_section.as_ptr().add(self.offset_in_text_section).add(instruction_length) };
         let destination = if self.result.pc_section[target_pc] != 0 {
             // Backward jump
@@ -1702,10 +1708,10 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
         } else {
             // Forward jump, needs relocation
             self.text_section_jumps.push(Jump { location: unsafe { instruction_end.sub(4) }, target_pc });
-            return 0;
+            return Ok(0);
         };
         debug_assert!(!destination.is_null());
-        (unsafe { destination.offset_from(instruction_end) } as i32) // Relative jump
+        Ok((unsafe { destination.offset_from(instruction_end) } as i32)) // Relative jump
     }
 
     fn resolve_jumps(&mut self) {
