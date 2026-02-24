@@ -1329,6 +1329,11 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
 
         if division {
             // Prevent division by zero
+            if let Some(0) = imm {
+                self.emit_ins(X86Instruction::load_immediate(REGISTER_SCRATCH, self.pc as i64));
+                self.emit_ins(X86Instruction::jump_immediate(self.relative_to_anchor(ANCHOR_DIV_BY_ZERO, 5)));
+                return;
+            }
             if imm.is_none() {
                 self.emit_ins(X86Instruction::load_immediate(REGISTER_SCRATCH, self.pc as i64)); // Save pc
                 self.emit_ins(X86Instruction::test(size, src, src, None)); // src == 0

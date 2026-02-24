@@ -4124,3 +4124,59 @@ fn test_err_lddw_last_insn() {
         assert_error!(result, "InvalidInstruction");
     }
 }
+
+#[test]
+fn test_err_div_by_zero_imm() {
+    // DIV64_IMM with imm=0 (divide by zero immediate)
+    let mut prog = [0u8; 16];
+    prog[0] = ebpf::DIV64_IMM;
+    prog[1] = 0x00; // dst=r0
+    // imm at bytes 4..8, left as 0
+    prog[8] = ebpf::EXIT;
+    let config = Config {
+        enabled_sbpf_versions: SBPFVersion::V0..=SBPFVersion::V0,
+        ..Config::default()
+    };
+    let loader = Arc::new(BuiltinProgram::new_loader(config));
+    let mut executable = Executable::<TestContextObject>::from_text_bytes(
+        &prog,
+        loader.clone(),
+        SBPFVersion::V0,
+        FunctionRegistry::default(),
+    )
+    .unwrap();
+
+    // Interpreter: should return DivideByZero
+    {
+        let mut context_object = TestContextObject::new(3);
+        create_vm!(
+            vm,
+            &executable,
+            &mut context_object,
+            stack,
+            heap,
+            vec![],
+            None
+        );
+        let (_instruction_count, result) = vm.execute_program(&executable, true);
+        assert_error!(result, "DivideByZero");
+    }
+
+    // JIT: the div-by-zero immediate is caught at runtime
+    #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
+    {
+        executable.jit_compile().unwrap();
+        let mut context_object = TestContextObject::new(3);
+        create_vm!(
+            vm,
+            &executable,
+            &mut context_object,
+            stack,
+            heap,
+            vec![],
+            None
+        );
+        let (_instruction_count, result) = vm.execute_program(&executable, false);
+        assert_error!(result, "DivideByZero");
+    }
+}

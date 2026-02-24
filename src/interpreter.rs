@@ -274,7 +274,10 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                 let vm_addr = (self.reg[src] as i64).wrapping_add(insn.off as i64) as u64;
                 self.reg[dst] = translate_memory_access!(self, load, vm_addr, u8);
             },
-            ebpf::DIV32_IMM  if !self.executable.get_sbpf_version().enable_pqr() => self.reg[dst] = (self.reg[dst] as u32             / insn.imm as u32)      as u64,
+            ebpf::DIV32_IMM  if !self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, u32);
+                                self.reg[dst] = (self.reg[dst] as u32             / insn.imm as u32)      as u64;
+            },
             ebpf::DIV32_REG  if !self.executable.get_sbpf_version().enable_pqr() => {
                 throw_error!(DivideByZero; self, self.reg[src], u32);
                                 self.reg[dst] = (self.reg[dst] as u32             / self.reg[src] as u32) as u64;
@@ -296,7 +299,10 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                 let vm_addr = (self.reg[src] as i64).wrapping_add(insn.off as i64) as u64;
                 self.reg[dst] = translate_memory_access!(self, load, vm_addr, u32);
             },
-            ebpf::MOD32_IMM  if !self.executable.get_sbpf_version().enable_pqr() => self.reg[dst] = (self.reg[dst] as u32             % insn.imm as u32)      as u64,
+            ebpf::MOD32_IMM  if !self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, u32);
+                                self.reg[dst] = (self.reg[dst] as u32             % insn.imm as u32)      as u64;
+            },
             ebpf::MOD32_REG  if !self.executable.get_sbpf_version().enable_pqr() => {
                 throw_error!(DivideByZero; self, self.reg[src], u32);
                                 self.reg[dst] = (self.reg[dst] as u32             % self.reg[src] as u32) as u64;
@@ -355,7 +361,10 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                 let vm_addr = (self.reg[dst] as i64).wrapping_add(insn.off as i64) as u64;
                 translate_memory_access!(self, store, self.reg[src], vm_addr, u8);
             },
-            ebpf::DIV64_IMM  if !self.executable.get_sbpf_version().enable_pqr() => self.reg[dst] /= insn.imm as u64,
+            ebpf::DIV64_IMM  if !self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, u64);
+                                self.reg[dst] /= insn.imm as u64;
+            },
             ebpf::ST_2B_IMM  if self.executable.get_sbpf_version().move_memory_instruction_classes() => {
                 let vm_addr = (self.reg[dst] as i64).wrapping_add(insn.off as i64) as u64;
                 translate_memory_access!(self, store, insn.imm, vm_addr, u16);
@@ -385,7 +394,10 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                 let vm_addr = (self.reg[dst] as i64).wrapping_add(insn.off as i64) as u64;
                 translate_memory_access!(self, store, self.reg[src], vm_addr, u32);
             },
-            ebpf::MOD64_IMM  if !self.executable.get_sbpf_version().enable_pqr() => self.reg[dst] %= insn.imm as u64,
+            ebpf::MOD64_IMM  if !self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, u64);
+                                self.reg[dst] %= insn.imm as u64;
+            },
             ebpf::ST_8B_IMM  if self.executable.get_sbpf_version().move_memory_instruction_classes() => {
                 let vm_addr = (self.reg[dst] as i64).wrapping_add(insn.off as i64) as u64;
                 translate_memory_access!(self, store, insn.imm, vm_addr, u64);
@@ -418,6 +430,7 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
             ebpf::SHMUL64_IMM if self.executable.get_sbpf_version().enable_pqr() => self.reg[dst] = (self.reg[dst] as i64 as i128).wrapping_mul(insn.imm as i128).wrapping_shr(64) as u64,
             ebpf::SHMUL64_REG if self.executable.get_sbpf_version().enable_pqr() => self.reg[dst] = (self.reg[dst] as i64 as i128).wrapping_mul(self.reg[src] as i64 as i128).wrapping_shr(64) as u64,
             ebpf::UDIV32_IMM if self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, u32);
                                 self.reg[dst] = (self.reg[dst] as u32 / insn.imm as u32)      as u64;
             }
             ebpf::UDIV32_REG if self.executable.get_sbpf_version().enable_pqr() => {
@@ -425,6 +438,7 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                                 self.reg[dst] = (self.reg[dst] as u32 / self.reg[src] as u32) as u64;
             },
             ebpf::UDIV64_IMM if self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, u64);
                                 self.reg[dst] /= insn.imm as u32 as u64;
             }
             ebpf::UDIV64_REG if self.executable.get_sbpf_version().enable_pqr() => {
@@ -432,6 +446,7 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                                 self.reg[dst] /= self.reg[src];
             },
             ebpf::UREM32_IMM if self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, u32);
                                 self.reg[dst] = (self.reg[dst] as u32 % insn.imm as u32)      as u64;
             }
             ebpf::UREM32_REG if self.executable.get_sbpf_version().enable_pqr() => {
@@ -439,6 +454,7 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                                 self.reg[dst] = (self.reg[dst] as u32 % self.reg[src] as u32) as u64;
             },
             ebpf::UREM64_IMM if self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, u64);
                                 self.reg[dst] %= insn.imm as u32 as u64;
             }
             ebpf::UREM64_REG if self.executable.get_sbpf_version().enable_pqr() => {
@@ -446,6 +462,7 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                                 self.reg[dst] %= self.reg[src];
             },
             ebpf::SDIV32_IMM if self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, i32);
                 throw_error!(DivideOverflow; self, insn.imm, self.reg[dst], i32);
                                 self.reg[dst] = (self.reg[dst] as i32 / insn.imm as i32)      as u32 as u64;
             }
@@ -455,6 +472,7 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                                 self.reg[dst] = (self.reg[dst] as i32 / self.reg[src] as i32) as u32 as u64;
             },
             ebpf::SDIV64_IMM if self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, i64);
                 throw_error!(DivideOverflow; self, insn.imm, self.reg[dst], i64);
                                 self.reg[dst] = (self.reg[dst] as i64 / insn.imm)             as u64;
             }
@@ -464,6 +482,7 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                                 self.reg[dst] = (self.reg[dst] as i64 / self.reg[src] as i64) as u64;
             },
             ebpf::SREM32_IMM if self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, i32);
                 throw_error!(DivideOverflow; self, insn.imm, self.reg[dst], i32);
                                 self.reg[dst] = (self.reg[dst] as i32 % insn.imm as i32)      as u32 as u64;
             }
@@ -473,6 +492,7 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                                 self.reg[dst] = (self.reg[dst] as i32 % self.reg[src] as i32) as u32 as u64;
             },
             ebpf::SREM64_IMM if self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, i64);
                 throw_error!(DivideOverflow; self, insn.imm, self.reg[dst], i64);
                                 self.reg[dst] = (self.reg[dst] as i64 % insn.imm)             as u64;
             }
