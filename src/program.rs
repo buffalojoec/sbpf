@@ -335,7 +335,8 @@ impl<C: ContextObject> std::fmt::Debug for BuiltinProgram<C> {
 /// Generates an adapter for a BuiltinFunction between the Rust and the VM interface
 #[macro_export]
 macro_rules! declare_builtin_function {
-    ($(#[$attr:meta])* $name:ident $(<$($generic_ident:tt : $generic_type:tt),+>)?, fn rust(
+    // Non-generic: explicit codegen
+    ($(#[$attr:meta])* $name:ident, fn rust(
         $vm:ident : &mut $ContextObject:ty,
         $arg_a:ident : u64,
         $arg_b:ident : u64,
@@ -351,7 +352,7 @@ macro_rules! declare_builtin_function {
         pub struct $name {}
         impl $name {
             /// Rust interface
-            pub fn rust $(<$($generic_ident : $generic_type),+>)? (
+            pub fn rust(
                 $vm: &mut $ContextObject,
                 $arg_a: u64,
                 $arg_b: u64,
@@ -364,7 +365,7 @@ macro_rules! declare_builtin_function {
             }
             /// VM interface
             #[allow(clippy::too_many_arguments)]
-            pub fn vm $(<$($generic_ident : $generic_type),+>)? (
+            pub fn vm(
                 $vm: *mut $crate::vm::EbpfVm<$ContextObject>,
                 $arg_a: u64,
                 $arg_b: u64,
@@ -380,7 +381,7 @@ macro_rules! declare_builtin_function {
                 if config.enable_instruction_meter {
                     vm.context_object_pointer.consume(vm.previous_instruction_meter - vm.due_insn_count);
                 }
-                let converted_result: $crate::error::ProgramResult = Self::rust $(::<$($generic_ident),+>)?(
+                let converted_result: $crate::error::ProgramResult = Self::rust(
                     vm.context_object_pointer, $arg_a, $arg_b, $arg_c, $arg_d, $arg_e, &mut vm.memory_mapping,
                 ).map_err(|err| $crate::error::EbpfError::SyscallError(err)).into();
                 vm.program_result = converted_result;
@@ -399,7 +400,74 @@ macro_rules! declare_builtin_function {
                 = (Self::vm, Self::codegen);
         }
     };
-    ($(#[$attr:meta])* $name:ident $(<$($generic_ident:tt : $generic_type:tt),+>)?, fn rust(
+    // Generic: explicit codegen
+    ($(#[$attr:meta])* $name:ident <$($generic_ident:tt : $generic_type:tt),+>, fn rust(
+        $vm:ident : &mut $ContextObject:ty,
+        $arg_a:ident : u64,
+        $arg_b:ident : u64,
+        $arg_c:ident : u64,
+        $arg_d:ident : u64,
+        $arg_e:ident : u64,
+        $memory_mapping:ident : &mut $MemoryMapping:ty,
+    ) -> $Result:ty { $($rust:tt)* }
+    fn codegen(
+        $jit:ident : &mut $crate::program::JitCompiler<$ContextObject2:ty>,
+    ) { $($codegen:tt)* }) => {
+        $(#[$attr])*
+        pub struct $name {}
+        impl $name {
+            /// Rust interface
+            pub fn rust <$($generic_ident : $generic_type),+> (
+                $vm: &mut $ContextObject,
+                $arg_a: u64,
+                $arg_b: u64,
+                $arg_c: u64,
+                $arg_d: u64,
+                $arg_e: u64,
+                $memory_mapping: &mut $MemoryMapping,
+            ) -> $Result {
+                $($rust)*
+            }
+            /// VM interface
+            #[allow(clippy::too_many_arguments)]
+            pub fn vm <$($generic_ident : $generic_type),+> (
+                $vm: *mut $crate::vm::EbpfVm<$ContextObject>,
+                $arg_a: u64,
+                $arg_b: u64,
+                $arg_c: u64,
+                $arg_d: u64,
+                $arg_e: u64,
+            ) {
+                use $crate::vm::ContextObject;
+                let vm = unsafe {
+                    &mut *($vm.cast::<u64>().offset(-($crate::vm::get_runtime_environment_key() as isize)).cast::<$crate::vm::EbpfVm<$ContextObject>>())
+                };
+                let config = vm.loader.get_config();
+                if config.enable_instruction_meter {
+                    vm.context_object_pointer.consume(vm.previous_instruction_meter - vm.due_insn_count);
+                }
+                let converted_result: $crate::error::ProgramResult = Self::rust ::<$($generic_ident),+>(
+                    vm.context_object_pointer, $arg_a, $arg_b, $arg_c, $arg_d, $arg_e, &mut vm.memory_mapping,
+                ).map_err(|err| $crate::error::EbpfError::SyscallError(err)).into();
+                vm.program_result = converted_result;
+                if config.enable_instruction_meter {
+                    vm.previous_instruction_meter = vm.context_object_pointer.get_remaining();
+                }
+            }
+            /// JIT codegen interceptor
+            pub fn codegen <$($generic_ident : $generic_type),+> (
+                $jit: &mut $crate::program::JitCompiler<$ContextObject2>,
+            ) {
+                $($codegen)*
+            }
+            /// Generate an entry for the syscall registry
+            pub fn registry_entry <$($generic_ident : $generic_type),+> () -> ($crate::program::BuiltinFunction<$ContextObject>, $crate::program::BuiltinCodegen<$ContextObject>) {
+                (Self::vm::<$($generic_ident),+>, Self::codegen::<$($generic_ident),+>)
+            }
+        }
+    };
+    // Non-generic: default codegen
+    ($(#[$attr:meta])* $name:ident, fn rust(
         $vm:ident : &mut $ContextObject:ty,
         $arg_a:ident : u64,
         $arg_b:ident : u64,
@@ -408,8 +476,8 @@ macro_rules! declare_builtin_function {
         $arg_e:ident : u64,
         $memory_mapping:ident : &mut $MemoryMapping:ty,
     ) -> $Result:ty { $($rust:tt)* }) => {
-        declare_builtin_function!(
-            $(#[$attr])* $name $(<$($generic_ident : $generic_type),+>)?,
+        $crate::declare_builtin_function!(
+            $(#[$attr])* $name,
             fn rust(
                 $vm : &mut $ContextObject,
                 $arg_a : u64,
@@ -426,6 +494,244 @@ macro_rules! declare_builtin_function {
             ) {
                 jit.emit_external_call(Self::vm);
             }
+        );
+    };
+    // Generic: default codegen
+    ($(#[$attr:meta])* $name:ident <$($generic_ident:tt : $generic_type:tt),+>, fn rust(
+        $vm:ident : &mut $ContextObject:ty,
+        $arg_a:ident : u64,
+        $arg_b:ident : u64,
+        $arg_c:ident : u64,
+        $arg_d:ident : u64,
+        $arg_e:ident : u64,
+        $memory_mapping:ident : &mut $MemoryMapping:ty,
+    ) -> $Result:ty { $($rust:tt)* }) => {
+        $crate::declare_builtin_function!(
+            $(#[$attr])* $name <$($generic_ident : $generic_type),+>,
+            fn rust(
+                $vm : &mut $ContextObject,
+                $arg_a : u64,
+                $arg_b : u64,
+                $arg_c : u64,
+                $arg_d : u64,
+                $arg_e : u64,
+                $memory_mapping : &mut $MemoryMapping,
+            ) -> $Result {
+                $($rust)*
+            }
+            fn codegen(
+                jit : &mut $crate::program::JitCompiler<$ContextObject>,
+            ) {
+                jit.emit_external_call(Self::vm::<$($generic_ident),+>);
+            }
+        );
+    };
+
+    // ---- Arms with separate RegContext for registration ----
+    //
+    // These arms allow using a type with elided lifetimes for `rust()` (so
+    // tests can call it with non-'static InvokeContext) while using a
+    // concrete `'static` type for `vm()`, `codegen()`, and `REGISTRY_ENTRY`.
+
+    // Non-generic: explicit codegen, with RegContext
+    ($(#[$attr:meta])* $name:ident, fn rust(
+        $vm:ident : &mut $ContextObject:ty,
+        $arg_a:ident : u64,
+        $arg_b:ident : u64,
+        $arg_c:ident : u64,
+        $arg_d:ident : u64,
+        $arg_e:ident : u64,
+        $memory_mapping:ident : &mut $MemoryMapping:ty,
+    ) -> $Result:ty { $($rust:tt)* } $(,)?
+    fn codegen(
+        $jit:ident : &mut $crate::program::JitCompiler<$ContextObject2:ty>,
+    ) { $($codegen:tt)* } $(,)?
+    type RegContext = $RegContext:ty;
+    ) => {
+        $(#[$attr])*
+        pub struct $name {}
+        impl $name {
+            /// Rust interface
+            pub fn rust(
+                $vm: &mut $ContextObject,
+                $arg_a: u64,
+                $arg_b: u64,
+                $arg_c: u64,
+                $arg_d: u64,
+                $arg_e: u64,
+                $memory_mapping: &mut $MemoryMapping,
+            ) -> $Result {
+                $($rust)*
+            }
+            /// VM interface
+            #[allow(clippy::too_many_arguments)]
+            pub fn vm(
+                $vm: *mut $crate::vm::EbpfVm<$RegContext>,
+                $arg_a: u64,
+                $arg_b: u64,
+                $arg_c: u64,
+                $arg_d: u64,
+                $arg_e: u64,
+            ) {
+                use $crate::vm::ContextObject;
+                let vm = unsafe {
+                    &mut *($vm.cast::<u64>().offset(-($crate::vm::get_runtime_environment_key() as isize)).cast::<$crate::vm::EbpfVm<$RegContext>>())
+                };
+                let config = vm.loader.get_config();
+                if config.enable_instruction_meter {
+                    vm.context_object_pointer.consume(vm.previous_instruction_meter - vm.due_insn_count);
+                }
+                let converted_result: $crate::error::ProgramResult = Self::rust(
+                    vm.context_object_pointer, $arg_a, $arg_b, $arg_c, $arg_d, $arg_e, &mut vm.memory_mapping,
+                ).map_err(|err| $crate::error::EbpfError::SyscallError(err)).into();
+                vm.program_result = converted_result;
+                if config.enable_instruction_meter {
+                    vm.previous_instruction_meter = vm.context_object_pointer.get_remaining();
+                }
+            }
+            /// JIT codegen interceptor
+            pub fn codegen(
+                $jit: &mut $crate::program::JitCompiler<$ContextObject2>,
+            ) {
+                $($codegen)*
+            }
+            /// Generate an entry for the syscall registry
+            pub const REGISTRY_ENTRY: ($crate::program::BuiltinFunction<$RegContext>, $crate::program::BuiltinCodegen<$RegContext>)
+                = (Self::vm, Self::codegen);
+        }
+    };
+    // Generic: explicit codegen, with RegContext
+    ($(#[$attr:meta])* $name:ident <$($generic_ident:tt : $generic_type:tt),+>, fn rust(
+        $vm:ident : &mut $ContextObject:ty,
+        $arg_a:ident : u64,
+        $arg_b:ident : u64,
+        $arg_c:ident : u64,
+        $arg_d:ident : u64,
+        $arg_e:ident : u64,
+        $memory_mapping:ident : &mut $MemoryMapping:ty,
+    ) -> $Result:ty { $($rust:tt)* } $(,)?
+    fn codegen(
+        $jit:ident : &mut $crate::program::JitCompiler<$ContextObject2:ty>,
+    ) { $($codegen:tt)* } $(,)?
+    type RegContext = $RegContext:ty;
+    ) => {
+        $(#[$attr])*
+        pub struct $name {}
+        impl $name {
+            /// Rust interface
+            pub fn rust <$($generic_ident : $generic_type),+> (
+                $vm: &mut $ContextObject,
+                $arg_a: u64,
+                $arg_b: u64,
+                $arg_c: u64,
+                $arg_d: u64,
+                $arg_e: u64,
+                $memory_mapping: &mut $MemoryMapping,
+            ) -> $Result {
+                $($rust)*
+            }
+            /// VM interface
+            #[allow(clippy::too_many_arguments)]
+            pub fn vm <$($generic_ident : $generic_type),+> (
+                $vm: *mut $crate::vm::EbpfVm<$RegContext>,
+                $arg_a: u64,
+                $arg_b: u64,
+                $arg_c: u64,
+                $arg_d: u64,
+                $arg_e: u64,
+            ) {
+                use $crate::vm::ContextObject;
+                let vm = unsafe {
+                    &mut *($vm.cast::<u64>().offset(-($crate::vm::get_runtime_environment_key() as isize)).cast::<$crate::vm::EbpfVm<$RegContext>>())
+                };
+                let config = vm.loader.get_config();
+                if config.enable_instruction_meter {
+                    vm.context_object_pointer.consume(vm.previous_instruction_meter - vm.due_insn_count);
+                }
+                let converted_result: $crate::error::ProgramResult = Self::rust ::<$($generic_ident),+>(
+                    vm.context_object_pointer, $arg_a, $arg_b, $arg_c, $arg_d, $arg_e, &mut vm.memory_mapping,
+                ).map_err(|err| $crate::error::EbpfError::SyscallError(err)).into();
+                vm.program_result = converted_result;
+                if config.enable_instruction_meter {
+                    vm.previous_instruction_meter = vm.context_object_pointer.get_remaining();
+                }
+            }
+            /// JIT codegen interceptor
+            pub fn codegen <$($generic_ident : $generic_type),+> (
+                $jit: &mut $crate::program::JitCompiler<$ContextObject2>,
+            ) {
+                $($codegen)*
+            }
+            /// Generate an entry for the syscall registry
+            pub fn registry_entry <$($generic_ident : $generic_type),+> () -> ($crate::program::BuiltinFunction<$RegContext>, $crate::program::BuiltinCodegen<$RegContext>) {
+                (Self::vm::<$($generic_ident),+>, Self::codegen::<$($generic_ident),+>)
+            }
+        }
+    };
+    // Non-generic: default codegen, with RegContext
+    ($(#[$attr:meta])* $name:ident, fn rust(
+        $vm:ident : &mut $ContextObject:ty,
+        $arg_a:ident : u64,
+        $arg_b:ident : u64,
+        $arg_c:ident : u64,
+        $arg_d:ident : u64,
+        $arg_e:ident : u64,
+        $memory_mapping:ident : &mut $MemoryMapping:ty,
+    ) -> $Result:ty { $($rust:tt)* } $(,)?
+    type RegContext = $RegContext:ty;
+    ) => {
+        $crate::declare_builtin_function!(
+            $(#[$attr])* $name,
+            fn rust(
+                $vm : &mut $ContextObject,
+                $arg_a : u64,
+                $arg_b : u64,
+                $arg_c : u64,
+                $arg_d : u64,
+                $arg_e : u64,
+                $memory_mapping : &mut $MemoryMapping,
+            ) -> $Result {
+                $($rust)*
+            }
+            fn codegen(
+                jit : &mut $crate::program::JitCompiler<$RegContext>,
+            ) {
+                jit.emit_external_call(Self::vm);
+            }
+            type RegContext = $RegContext;
+        );
+    };
+    // Generic: default codegen, with RegContext
+    ($(#[$attr:meta])* $name:ident <$($generic_ident:tt : $generic_type:tt),+>, fn rust(
+        $vm:ident : &mut $ContextObject:ty,
+        $arg_a:ident : u64,
+        $arg_b:ident : u64,
+        $arg_c:ident : u64,
+        $arg_d:ident : u64,
+        $arg_e:ident : u64,
+        $memory_mapping:ident : &mut $MemoryMapping:ty,
+    ) -> $Result:ty { $($rust:tt)* } $(,)?
+    type RegContext = $RegContext:ty;
+    ) => {
+        $crate::declare_builtin_function!(
+            $(#[$attr])* $name <$($generic_ident : $generic_type),+>,
+            fn rust(
+                $vm : &mut $ContextObject,
+                $arg_a : u64,
+                $arg_b : u64,
+                $arg_c : u64,
+                $arg_d : u64,
+                $arg_e : u64,
+                $memory_mapping : &mut $MemoryMapping,
+            ) -> $Result {
+                $($rust)*
+            }
+            fn codegen(
+                jit : &mut $crate::program::JitCompiler<$RegContext>,
+            ) {
+                jit.emit_external_call(Self::vm::<$($generic_ident),+>);
+            }
+            type RegContext = $RegContext;
         );
     };
 }
