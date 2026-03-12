@@ -6,6 +6,7 @@ use solana_sbpf::{
     ebpf,
     elf::Executable,
     memory_region::MemoryRegion,
+    metrics::VerifyMetrics,
     program::{BuiltinProgram, FunctionRegistry},
     verifier::{RequisiteVerifier, Verifier},
     vm::ExecutionMode,
@@ -29,7 +30,7 @@ fuzz_target!(|data: DumbFuzzData| {
     let config = data.template.into();
     let function_registry = FunctionRegistry::default();
 
-    if RequisiteVerifier::verify(&prog, &config, sbpf_version).is_err() {
+    if RequisiteVerifier::verify(&prog, &config, sbpf_version, &mut VerifyMetrics::default()).is_err() {
         // verify please
         return;
     }

@@ -12,7 +12,7 @@
 
 //! Verifies that the bytecode is valid for the given config.
 
-use crate::{ebpf, program::SBPFVersion, vm::Config};
+use crate::{ebpf, metrics::VerifyMetrics, program::SBPFVersion, vm::Config};
 use thiserror::Error;
 
 /// Error definitions
@@ -87,8 +87,12 @@ pub trait Verifier {
     ///   - Unknown instructions.
     ///   - Bad formed instruction.
     ///   - Unknown eBPF syscall index.
-    fn verify(prog: &[u8], config: &Config, sbpf_version: SBPFVersion)
-        -> Result<(), VerifierError>;
+    fn verify(
+        prog: &[u8],
+        config: &Config,
+        sbpf_version: SBPFVersion,
+        metrics: &mut VerifyMetrics,
+    ) -> Result<(), VerifierError>;
 }
 
 fn check_prog_len(prog: &[u8]) -> Result<(), VerifierError> {
@@ -219,7 +223,7 @@ pub struct RequisiteVerifier {}
 impl Verifier for RequisiteVerifier {
     /// Check the program against the verifier's rules
     #[rustfmt::skip]
-    fn verify(prog: &[u8], _config: &Config, sbpf_version: SBPFVersion) -> Result<(), VerifierError> {
+    fn verify(prog: &[u8], _config: &Config, sbpf_version: SBPFVersion, metrics: &mut VerifyMetrics) -> Result<(), VerifierError> {
         check_prog_len(prog)?;
 
         let program_range = 0..prog.len() / ebpf::INSN_SIZE;
@@ -417,6 +421,7 @@ impl Verifier for RequisiteVerifier {
             return Err(VerifierError::JumpOutOfCode(insn_ptr, insn_ptr));
         }
 
+        metrics.instruction_count = insn_ptr as u64;
         Ok(())
     }
 }

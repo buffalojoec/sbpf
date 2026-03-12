@@ -23,6 +23,7 @@ use solana_sbpf::{
     elf::Executable,
     error::{EbpfError, ProgramResult},
     memory_region::{AccessType, MemoryMapping, MemoryRegion},
+    metrics::VerifyMetrics,
     program::{BuiltinFunctionDefinition, BuiltinProgram, FunctionRegistry, SBPFVersion},
     static_analysis::Analysis,
     verifier::RequisiteVerifier,
@@ -3113,7 +3114,7 @@ fn execute_generated_program(prog: &[u8]) -> bool {
     let Ok(executable) = executable else {
         return false;
     };
-    if executable.verify::<RequisiteVerifier>().is_err() || executable.jit_compile().is_err() {
+    if executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).is_err() || executable.jit_compile().is_err() {
         return false;
     }
     let (instruction_count_interpreter, trace_interpreter, result_interpreter) = {

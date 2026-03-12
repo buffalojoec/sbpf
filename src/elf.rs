@@ -19,6 +19,7 @@ use crate::{
     },
     error::EbpfError,
     memory_region::MemoryRegion,
+    metrics::{LoadMetrics, VerifyMetrics},
     program::{BuiltinProgram, FunctionRegistry, SBPFVersion},
     verifier::Verifier,
     vm::{Config, ContextObject},
@@ -27,7 +28,7 @@ use crate::{
 #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
 use crate::jit::{JitCompiler, JitProgram};
 use byteorder::{ByteOrder, LittleEndian};
-use std::{collections::BTreeMap, fmt::Debug, mem, ops::Range, str};
+use std::{collections::BTreeMap, fmt::Debug, mem, ops::Range, str, time::Instant};
 
 #[cfg(not(feature = "shuttle-test"))]
 use std::sync::Arc;
@@ -349,11 +350,15 @@ impl<C: ContextObject> Executable<C> {
     }
 
     /// Verify the executable
-    pub fn verify<V: Verifier>(&self) -> Result<(), EbpfError> {
+    pub fn verify<V: Verifier>(
+        &self,
+        metrics: &mut VerifyMetrics,
+    ) -> Result<(), EbpfError> {
         <V as Verifier>::verify(
             self.get_text_bytes().1,
             self.get_config(),
             self.get_sbpf_version(),
+            metrics,
         )?;
         Ok(())
     }
@@ -441,7 +446,11 @@ impl<C: ContextObject> Executable<C> {
     }
 
     /// Fully loads an ELF
-    pub fn load(bytes: &[u8], loader: Arc<BuiltinProgram<C>>) -> Result<Self, ElfError> {
+    pub fn load(
+        bytes: &[u8],
+        loader: Arc<BuiltinProgram<C>>,
+        metrics: &mut LoadMetrics,
+    ) -> Result<Self, ElfError> {
         const E_FLAGS_OFFSET: usize = 48;
         let e_flags = LittleEndian::read_u32(
             bytes
@@ -462,9 +471,9 @@ impl<C: ContextObject> Executable<C> {
         }
 
         let mut executable = if sbpf_version.enable_stricter_elf_headers() {
-            Self::load_with_strict_parser(bytes, loader)?
+            Self::load_with_strict_parser(bytes, loader, metrics)?
         } else {
-            Self::load_with_lenient_parser(bytes, loader)?
+            Self::load_with_lenient_parser(bytes, loader, metrics)?
         };
         executable.sbpf_version = sbpf_version;
         Ok(executable)
@@ -474,6 +483,7 @@ impl<C: ContextObject> Executable<C> {
     pub fn load_with_strict_parser(
         bytes: &[u8],
         loader: Arc<BuiltinProgram<C>>,
+        _metrics: &mut LoadMetrics,
     ) -> Result<Self, ElfParserError> {
         use crate::elf_parser::{
             consts::{ELFMAG, EV_CURRENT, PF_R, PF_X, PT_LOAD, SHN_UNDEF, STT_FUNC},
@@ -661,6 +671,7 @@ impl<C: ContextObject> Executable<C> {
     fn load_with_lenient_parser(
         bytes: &[u8],
         loader: Arc<BuiltinProgram<C>>,
+        metrics: &mut LoadMetrics,
     ) -> Result<Self, ElfError> {
         // We always need one memory copy to take ownership and for relocations
         let aligned_memory = AlignedMemory::<{ HOST_ALIGN }>::from_slice(bytes);
@@ -671,12 +682,17 @@ impl<C: ContextObject> Executable<C> {
                 // We might need another memory copy to ensure alignment
                 (aligned_memory.clone(), aligned_memory.as_slice())
             };
+
+        let ts = Instant::now();
         let elf = Elf64::parse(unrelocated_elf_bytes)?;
+        metrics.parse_us = ts.elapsed().as_micros() as u64;
 
         let config = loader.get_config();
         let header = elf.file_header();
 
+        let ts = Instant::now();
         Self::validate(&elf, elf_bytes.as_slice())?;
+        metrics.validate_us = ts.elapsed().as_micros() as u64;
 
         // calculate the text section info
         let text_section = get_section(&elf, b".text")?;
@@ -689,14 +705,17 @@ impl<C: ContextObject> Executable<C> {
 
         // relocate symbols
         let mut function_registry = FunctionRegistry::default();
+        let ts = Instant::now();
         Self::relocate(
             &mut function_registry,
             &loader,
             &elf,
             elf_bytes.as_slice_mut(),
         )?;
+        metrics.relocate_us = ts.elapsed().as_micros() as u64;
 
         // calculate entrypoint offset into the text section
+        let ts = Instant::now();
         let offset = header.e_entry.saturating_sub(text_section.sh_addr);
         if offset.checked_rem(ebpf::INSN_SIZE as u64) != Some(0) {
             return Err(ElfError::InvalidEntrypoint);
@@ -713,7 +732,9 @@ impl<C: ContextObject> Executable<C> {
         } else {
             return Err(ElfError::InvalidEntrypoint);
         };
+        metrics.entry_us = ts.elapsed().as_micros() as u64;
 
+        let ts = Instant::now();
         let ro_section = Self::parse_ro_sections(
             config,
             elf.section_header_table()
@@ -721,6 +742,7 @@ impl<C: ContextObject> Executable<C> {
                 .map(|s| (elf.section_name(s.sh_name).ok(), s)),
             elf_bytes.as_slice(),
         )?;
+        metrics.ro_sections_us = ts.elapsed().as_micros() as u64;
         let ro_section_vaddr = match &ro_section {
             Section::Owned(offset, _data) => *offset,
             Section::Borrowed(offset, _byte_range) => *offset,

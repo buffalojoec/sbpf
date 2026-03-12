@@ -5,6 +5,7 @@ use solana_sbpf::{
     ebpf,
     elf::Executable,
     memory_region::{MemoryMapping, MemoryRegion},
+    metrics::VerifyMetrics,
     program::BuiltinProgram,
     static_analysis::Analysis,
     verifier::RequisiteVerifier,
@@ -109,7 +110,7 @@ fn main() {
     }
     .unwrap();
 
-    executable.verify::<RequisiteVerifier>().unwrap();
+    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
 
     let mut mem = match matches.value_of("input").unwrap().parse::<usize>() {
         Ok(allocate) => vec![0u8; allocate],

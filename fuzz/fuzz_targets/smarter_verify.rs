@@ -5,6 +5,7 @@ use libfuzzer_sys::fuzz_target;
 use semantic_aware::*;
 use solana_sbpf::{
     insn_builder::IntoBytes,
+    metrics::VerifyMetrics,
     verifier::{RequisiteVerifier, Verifier},
 };
 
@@ -25,7 +26,7 @@ fuzz_target!(|data: FuzzData| {
     let config = data.template.into();
 
     #[allow(unused)]
-    let res = RequisiteVerifier::verify(prog.into_bytes(), &config, sbpf_version);
+    let res = RequisiteVerifier::verify(prog.into_bytes(), &config, sbpf_version, &mut VerifyMetrics::default());
     #[cfg(feature = "only-verified")]
     assert!(res.is_ok(), "Verification failed: {:?}", res.err());
 });

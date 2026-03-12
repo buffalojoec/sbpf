@@ -10,6 +10,7 @@ use solana_sbpf::{
         Elf64, ElfParserError, SECTION_NAME_LENGTH_MAXIMUM,
     },
     memory_region::{AccessType, MemoryMapping},
+    metrics::LoadMetrics,
     program::{BuiltinFunctionDefinition, BuiltinProgram, SBPFVersion},
     vm::Config,
 };
@@ -36,7 +37,7 @@ fn test_strict_header() {
             enable_symbol_and_section_labels: true,
             ..Config::default()
         }));
-        let executable = ElfExecutable::load(&elf_bytes, loader.clone()).unwrap();
+        let executable = ElfExecutable::load(&elf_bytes, loader.clone(), &mut LoadMetrics::default()).unwrap();
         let (name, _pc) = executable.get_function_registry().lookup_by_key(4).unwrap();
         assert_eq!(name, b"entrypoint");
     }
@@ -45,12 +46,12 @@ fn test_strict_header() {
     {
         let mut elf_bytes = elf_bytes.clone();
         elf_bytes[0x0030] = 0xFF;
-        let err = ElfExecutable::load(&elf_bytes, loader.clone()).unwrap_err();
+        let err = ElfExecutable::load(&elf_bytes, loader.clone(), &mut LoadMetrics::default()).unwrap_err();
         assert_eq!(err, ElfError::UnsupportedSBPFVersion);
     }
 
     // Check that an empty file fails
-    let err = ElfExecutable::load_with_strict_parser(&[], loader.clone()).unwrap_err();
+    let err = ElfExecutable::load_with_strict_parser(&[], loader.clone(), &mut LoadMetrics::default()).unwrap_err();
     assert_eq!(err, ElfParserError::OutOfBounds);
 
     // Break the file header one byte at a time
@@ -69,7 +70,7 @@ fn test_strict_header() {
     for (offset, expected) in (0..std::mem::size_of::<Elf64Ehdr>()).zip(expected_results) {
         let mut elf_bytes = elf_bytes.clone();
         elf_bytes[offset] = 0xAF;
-        let result = ElfExecutable::load_with_strict_parser(&elf_bytes, loader.clone()).map(|_| ());
+        let result = ElfExecutable::load_with_strict_parser(&elf_bytes, loader.clone(), &mut LoadMetrics::default()).map(|_| ());
         assert_eq!(&result, expected);
     }
 
@@ -92,7 +93,7 @@ fn test_strict_header() {
             let mut elf_bytes = elf_bytes.clone();
             elf_bytes[offset] = 0xAF;
             let result =
-                ElfExecutable::load_with_strict_parser(&elf_bytes, loader.clone()).map(|_| ());
+                ElfExecutable::load_with_strict_parser(&elf_bytes, loader.clone(), &mut LoadMetrics::default()).map(|_| ());
             assert_eq!(&&result, expected);
         }
     }
@@ -106,7 +107,7 @@ fn test_strict_header() {
         elf_bytes[std::mem::offset_of!(Elf64Ehdr, e_phnum)] = 1;
         elf_bytes[std::mem::size_of::<Elf64Ehdr>() + std::mem::offset_of!(Elf64Phdr, p_offset)] =
             0x40;
-        let err = ElfExecutable::load_with_strict_parser(&elf_bytes, loader.clone()).unwrap_err();
+        let err = ElfExecutable::load_with_strict_parser(&elf_bytes, loader.clone(), &mut LoadMetrics::default()).unwrap_err();
         assert_eq!(err, ElfParserError::InvalidFileHeader);
         // Check that skipping the rodata with the PF_X flag indication succeeds
         elf_bytes[std::mem::size_of::<Elf64Ehdr>()
@@ -114,7 +115,7 @@ fn test_strict_header() {
             .copy_from_slice(program_header);
         elf_bytes[std::mem::size_of::<Elf64Ehdr>() + std::mem::offset_of!(Elf64Phdr, p_offset)] =
             0x78;
-        ElfExecutable::load_with_strict_parser(&elf_bytes, loader.clone()).unwrap();
+        ElfExecutable::load_with_strict_parser(&elf_bytes, loader.clone(), &mut LoadMetrics::default()).unwrap();
     }
 
     // Check that an unaligned program header length fails
@@ -122,7 +123,7 @@ fn test_strict_header() {
         let mut elf_bytes = elf_bytes.clone();
         elf_bytes[0x98] = 0x29;
         elf_bytes[0xA0] = 0x29;
-        let err = ElfExecutable::load_with_strict_parser(&elf_bytes, loader.clone()).unwrap_err();
+        let err = ElfExecutable::load_with_strict_parser(&elf_bytes, loader.clone(), &mut LoadMetrics::default()).unwrap_err();
         assert_eq!(err, ElfParserError::InvalidProgramHeader);
     }
 }
@@ -189,7 +190,7 @@ fn test_load() {
     let mut elf_bytes = Vec::new();
     file.read_to_end(&mut elf_bytes)
         .expect("failed to read elf file");
-    ElfExecutable::load(&elf_bytes, loader()).expect("validation failed");
+    ElfExecutable::load(&elf_bytes, loader(), &mut LoadMetrics::default()).expect("validation failed");
 }
 
 #[test]
@@ -200,7 +201,7 @@ fn test_load_unaligned() {
     // elf_bytes.as_ptr() + 1 to make it unaligned and test unaligned
     // parsing.
     elf_bytes.insert(0, 0);
-    ElfExecutable::load(&elf_bytes[1..], loader()).expect("validation failed");
+    ElfExecutable::load(&elf_bytes[1..], loader(), &mut LoadMetrics::default()).expect("validation failed");
 }
 
 #[test]
@@ -211,7 +212,7 @@ fn test_entrypoint() {
     let mut elf_bytes = Vec::new();
     file.read_to_end(&mut elf_bytes)
         .expect("failed to read elf file");
-    let elf = ElfExecutable::load(&elf_bytes, loader.clone()).expect("validation failed");
+    let elf = ElfExecutable::load(&elf_bytes, loader.clone(), &mut LoadMetrics::default()).expect("validation failed");
     let parsed_elf = Elf64::parse(&elf_bytes).unwrap();
     let executable: &Executable<TestContextObject> = &elf;
     assert_eq!(4, executable.get_entrypoint_instruction_offset());
@@ -227,34 +228,34 @@ fn test_entrypoint() {
 
     header.e_entry += 8;
     let elf_bytes = write_header(header.clone());
-    let elf = ElfExecutable::load(&elf_bytes, loader.clone()).expect("validation failed");
+    let elf = ElfExecutable::load(&elf_bytes, loader.clone(), &mut LoadMetrics::default()).expect("validation failed");
     let executable: &Executable<TestContextObject> = &elf;
     assert_eq!(5, executable.get_entrypoint_instruction_offset());
 
     header.e_entry = 1;
     let elf_bytes = write_header(header.clone());
     assert!(matches!(
-        ElfExecutable::load(&elf_bytes, loader.clone()),
+        ElfExecutable::load(&elf_bytes, loader.clone(), &mut LoadMetrics::default()),
         Err(ElfError::EntrypointOutOfBounds)
     ));
 
     header.e_entry = u64::MAX;
     let elf_bytes = write_header(header.clone());
     assert!(matches!(
-        ElfExecutable::load(&elf_bytes, loader.clone()),
+        ElfExecutable::load(&elf_bytes, loader.clone(), &mut LoadMetrics::default()),
         Err(ElfError::EntrypointOutOfBounds)
     ));
 
     header.e_entry = initial_e_entry + ebpf::INSN_SIZE as u64 + 1;
     let elf_bytes = write_header(header.clone());
     assert!(matches!(
-        ElfExecutable::load(&elf_bytes, loader.clone()),
+        ElfExecutable::load(&elf_bytes, loader.clone(), &mut LoadMetrics::default()),
         Err(ElfError::InvalidEntrypoint)
     ));
 
     header.e_entry = initial_e_entry;
     let elf_bytes = write_header(header);
-    let elf = ElfExecutable::load(&elf_bytes, loader).expect("validation failed");
+    let elf = ElfExecutable::load(&elf_bytes, loader, &mut LoadMetrics::default()).expect("validation failed");
     let executable: &Executable<TestContextObject> = &elf;
     assert_eq!(4, executable.get_entrypoint_instruction_offset());
 }
@@ -640,7 +641,7 @@ fn test_borrowed_ro_region_initial_gap() {
 fn test_writable_data_section() {
     let elf_bytes =
         std::fs::read("tests/elfs/data_section_sbpfv0.so").expect("failed to read elf file");
-    ElfExecutable::load(&elf_bytes, loader()).expect("validation failed");
+    ElfExecutable::load(&elf_bytes, loader(), &mut LoadMetrics::default()).expect("validation failed");
 }
 
 #[test]
@@ -648,7 +649,7 @@ fn test_writable_data_section() {
 fn test_bss_section() {
     let elf_bytes =
         std::fs::read("tests/elfs/bss_section_sbpfv0.so").expect("failed to read elf file");
-    ElfExecutable::load(&elf_bytes, loader()).expect("validation failed");
+    ElfExecutable::load(&elf_bytes, loader(), &mut LoadMetrics::default()).expect("validation failed");
 }
 
 #[test]
@@ -656,7 +657,7 @@ fn test_bss_section() {
 fn test_program_headers_overflow() {
     let elf_bytes =
         std::fs::read("tests/elfs/program_headers_overflow.so").expect("failed to read elf file");
-    ElfExecutable::load(&elf_bytes, loader()).expect("validation failed");
+    ElfExecutable::load(&elf_bytes, loader(), &mut LoadMetrics::default()).expect("validation failed");
 }
 
 #[test]
@@ -665,7 +666,7 @@ fn test_relative_call_oob_backward() {
     let mut elf_bytes =
         std::fs::read("tests/elfs/relative_call_sbpfv0.so").expect("failed to read elf file");
     LittleEndian::write_i32(&mut elf_bytes[0x164..0x168], -11i32);
-    ElfExecutable::load(&elf_bytes, loader()).expect("validation failed");
+    ElfExecutable::load(&elf_bytes, loader(), &mut LoadMetrics::default()).expect("validation failed");
 }
 
 #[test]
@@ -674,7 +675,7 @@ fn test_relative_call_oob_forward() {
     let mut elf_bytes =
         std::fs::read("tests/elfs/relative_call_sbpfv0.so").expect("failed to read elf file");
     LittleEndian::write_i32(&mut elf_bytes[0x17c..0x180], 5);
-    ElfExecutable::load(&elf_bytes, loader()).expect("validation failed");
+    ElfExecutable::load(&elf_bytes, loader(), &mut LoadMetrics::default()).expect("validation failed");
 }
 
 #[test]
@@ -687,7 +688,7 @@ fn test_err_unresolved_syscall_reloc_64_32() {
     });
     let elf_bytes =
         std::fs::read("tests/elfs/syscall_reloc_64_32_sbpfv0.so").expect("failed to read elf file");
-    ElfExecutable::load(&elf_bytes, Arc::new(loader)).expect("validation failed");
+    ElfExecutable::load(&elf_bytes, Arc::new(loader), &mut LoadMetrics::default()).expect("validation failed");
 }
 
 #[test]

@@ -286,7 +286,7 @@ macro_rules! test_interpreter_and_jit {
             const INSTRUCTION_METER_BUDGET: u64 = 1024;
             context_object.remaining = INSTRUCTION_METER_BUDGET;
         }
-        $executable.verify::<RequisiteVerifier>().unwrap();
+        $executable.verify::<RequisiteVerifier>(&mut solana_sbpf::metrics::VerifyMetrics::default()).unwrap();
         let (instruction_count_interpreter, result_interpreter, interpreter_final_pc, _trace_interpreter) = {
             let mut mem = $mem;
             let mem_region = MemoryRegion::new_writable(&mut mem, ebpf::MM_INPUT_START);

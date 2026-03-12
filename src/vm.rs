@@ -18,6 +18,7 @@ use crate::{
     error::{EbpfError, ProgramResult},
     interpreter::Interpreter,
     memory_region::MemoryMapping,
+    metrics::LoadMetrics,
     program::{BuiltinFunction, BuiltinProgram, FunctionRegistry, SBPFVersion},
     static_analysis::{Analysis, DummyContextObject, RegisterTraceEntry},
 };
@@ -136,7 +137,8 @@ impl Default for Config {
 impl<C: ContextObject> Executable<C> {
     /// Creates an executable from an ELF file
     pub fn from_elf(elf_bytes: &[u8], loader: Arc<BuiltinProgram<C>>) -> Result<Self, EbpfError> {
-        let executable = Executable::load(elf_bytes, loader)?;
+        let executable =
+            Executable::load(elf_bytes, loader, &mut LoadMetrics::default())?;
         Ok(executable)
     }
     /// Creates an executable from machine code
@@ -241,6 +243,7 @@ pub enum RuntimeEnvironmentSlot {
 ///     ebpf,
 ///     elf::Executable,
 ///     memory_region::{MemoryMapping, MemoryRegion},
+///     metrics::VerifyMetrics,
 ///     program::{BuiltinProgram, FunctionRegistry, SBPFVersion},
 ///     verifier::RequisiteVerifier,
 ///     vm::{Config, EbpfVm, ExecutionMode},
@@ -258,7 +261,7 @@ pub enum RuntimeEnvironmentSlot {
 /// let loader = std::sync::Arc::new(BuiltinProgram::new_mock());
 /// let function_registry = FunctionRegistry::default();
 /// let mut executable = Executable::<TestContextObject>::from_text_bytes(prog, loader.clone(), SBPFVersion::V4, function_registry).unwrap();
-/// executable.verify::<RequisiteVerifier>().unwrap();
+/// executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
 /// let mut context_object = TestContextObject::new(2);
 /// let sbpf_version = executable.get_sbpf_version();
 ///

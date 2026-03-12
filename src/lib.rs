@@ -40,6 +40,7 @@ pub mod jit;
 #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
 mod memory_management;
 pub mod memory_region;
+pub mod metrics;
 pub mod program;
 pub mod static_analysis;
 pub mod verifier;
