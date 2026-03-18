@@ -14,26 +14,28 @@ extern crate solana_sbpf;
 extern crate test_utils;
 extern crate thiserror;
 
-use byteorder::{ByteOrder, LittleEndian};
 #[cfg(all(not(windows), target_arch = "x86_64"))]
 use rand::{rngs::SmallRng, RngCore, SeedableRng};
-use solana_sbpf::{
-    assembler::assemble,
-    declare_builtin_function, ebpf,
-    elf::Executable,
-    error::{EbpfError, ProgramResult},
-    memory_region::{AccessType, MemoryMapping, MemoryRegion},
-    metrics::VerifyMetrics,
-    program::{BuiltinFunctionDefinition, BuiltinProgram, FunctionRegistry, SBPFVersion},
-    static_analysis::Analysis,
-    verifier::RequisiteVerifier,
-    vm::{Config, ContextObject},
-};
-use std::{fs::File, io::Read, sync::Arc};
-use test_utils::{
-    assert_error, compare_register_trace, create_vm, syscalls, test_interpreter_and_jit,
-    test_interpreter_and_jit_asm, test_interpreter_and_jit_elf, test_syscall_asm,
-    TestContextObject, PROG_TCP_PORT_80, TCP_SACK_ASM, TCP_SACK_MATCH, TCP_SACK_NOMATCH,
+use {
+    byteorder::{ByteOrder, LittleEndian},
+    solana_sbpf::{
+        assembler::assemble,
+        declare_builtin_function, ebpf,
+        elf::Executable,
+        error::{EbpfError, ProgramResult},
+        memory_region::{AccessType, MemoryMapping, MemoryRegion},
+        metrics::VerifyMetrics,
+        program::{BuiltinFunctionDefinition, BuiltinProgram, FunctionRegistry, SBPFVersion},
+        static_analysis::Analysis,
+        verifier::RequisiteVerifier,
+        vm::{Config, ContextObject},
+    },
+    std::{fs::File, io::Read, sync::Arc},
+    test_utils::{
+        assert_error, compare_register_trace, create_vm, syscalls, test_interpreter_and_jit,
+        test_interpreter_and_jit_asm, test_interpreter_and_jit_elf, test_syscall_asm,
+        TestContextObject, PROG_TCP_PORT_80, TCP_SACK_ASM, TCP_SACK_MATCH, TCP_SACK_NOMATCH,
+    },
 };
 
 // BPF_ALU32_LOAD : Arithmetic and Logic
@@ -2700,7 +2702,8 @@ fn test_syscall_reloc_64_32() {
 fn test_reloc_64_64_sbpfv0() {
     // Tests the correctness of R_BPF_64_64 relocations. The program returns the
     // address of the entrypoint.
-    //   [ 1] .text             PROGBITS        0000000000000120 000120 000018 00  AX  0   0  8
+    //   [ 1] .text             PROGBITS        0000000000000120 000120 000018 00
+    // AX  0   0  8
     test_interpreter_and_jit_elf!(
         "tests/elfs/reloc_64_64_sbpfv0.so",
         [],
@@ -2712,8 +2715,8 @@ fn test_reloc_64_64_sbpfv0() {
 
 #[test]
 fn test_reloc_64_64() {
-    // Tests the correctness of link-time R_BPF_64_64 relocations. The program returns the
-    // address of the entrypoint.
+    // Tests the correctness of link-time R_BPF_64_64 relocations. The program
+    // returns the address of the entrypoint.
     test_interpreter_and_jit_elf!(
         "tests/elfs/reloc_64_64.so",
         [],
@@ -2727,8 +2730,9 @@ fn test_reloc_64_64() {
 fn test_reloc_64_relative_sbpfv0() {
     // Tests the correctness of R_BPF_64_RELATIVE relocations. The program
     // returns the address of the first .rodata byte.
-    //   [ 1] .text             PROGBITS        0000000000000120 000120 000018 00  AX  0   0  8
-    //   [ 2] .rodata           PROGBITS        0000000000000138 000138 00000a 01 AMS  0   0  1
+    //   [ 1] .text             PROGBITS        0000000000000120 000120 000018 00
+    // AX  0   0  8   [ 2] .rodata           PROGBITS        0000000000000138
+    // 000138 00000a 01 AMS  0   0  1
     let config = Config {
         enabled_sbpf_versions: SBPFVersion::V0..=SBPFVersion::V0,
         ..Config::default()
@@ -2763,10 +2767,11 @@ fn test_reloc_64_relative() {
 
 #[test]
 fn test_reloc_64_relative_data() {
-    //  Tests the correctness of link-time R_BPF_64_RELATIVE relocations in sections other
-    // than .text. The program returns the address of the first .rodata byte.
-    // [ 1] .text             PROGBITS        0000000000000000 000190 000020 00  AX  0   0  8
-    // [ 2] .rodata           PROGBITS        0000000100000000 0001b0 000030 00 WAMS 0   0  8
+    //  Tests the correctness of link-time R_BPF_64_RELATIVE relocations in sections
+    // other than .text. The program returns the address of the first .rodata
+    // byte. [ 1] .text             PROGBITS        0000000000000000 000190
+    // 000020 00  AX  0   0  8 [ 2] .rodata           PROGBITS
+    // 0000000100000000 0001b0 000030 00 WAMS 0   0  8
     //
     let config = Config {
         enabled_sbpf_versions: SBPFVersion::V3..=SBPFVersion::V4,
@@ -2792,8 +2797,9 @@ fn test_reloc_64_relative_data_sbpfv0() {
     // compatibility when dealing with non-sbpfv3 files. See also Elf::relocate().
     //
     // The program returns the address of the first .rodata byte.
-    // [ 1] .text             PROGBITS        0000000000000120 000120 000020 00  AX  0   0  8
-    // [ 2] .rodata           PROGBITS        0000000000000140 000140 000019 01 AMS  0   0  1
+    // [ 1] .text             PROGBITS        0000000000000120 000120 000020 00  AX
+    // 0   0  8 [ 2] .rodata           PROGBITS        0000000000000140 000140
+    // 000019 01 AMS  0   0  1
     //
     let config = Config {
         enabled_sbpf_versions: SBPFVersion::V0..=SBPFVersion::V0,
@@ -3114,7 +3120,11 @@ fn execute_generated_program(prog: &[u8]) -> bool {
     let Ok(executable) = executable else {
         return false;
     };
-    if executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).is_err() || executable.jit_compile().is_err() {
+    if executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .is_err()
+        || executable.jit_compile().is_err()
+    {
         return false;
     }
     let (instruction_count_interpreter, trace_interpreter, result_interpreter) = {

@@ -11,16 +11,15 @@ extern crate test;
 
 #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
 use solana_sbpf::{ebpf, memory_region::MemoryRegion, program::SBPFVersion, vm::Config};
-use solana_sbpf::{
-    elf::Executable,
-    metrics::VerifyMetrics,
-    program::BuiltinProgram,
-    verifier::RequisiteVerifier,
-    vm::ExecutionMode,
+use {
+    solana_sbpf::{
+        elf::Executable, metrics::VerifyMetrics, program::BuiltinProgram,
+        verifier::RequisiteVerifier, vm::ExecutionMode,
+    },
+    std::{fs::File, io::Read, sync::Arc},
+    test::Bencher,
+    test_utils::{create_vm, TestContextObject},
 };
-use std::{fs::File, io::Read, sync::Arc};
-use test::Bencher;
-use test_utils::{create_vm, TestContextObject};
 
 #[bench]
 fn bench_init_interpreter_start(bencher: &mut Bencher) {
@@ -30,7 +29,9 @@ fn bench_init_interpreter_start(bencher: &mut Bencher) {
     let executable =
         Executable::<TestContextObject>::from_elf(&elf, Arc::new(BuiltinProgram::new_mock()))
             .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
     let mut context_object = TestContextObject::default();
     create_vm!(
         vm,
@@ -58,7 +59,9 @@ fn bench_init_jit_start(bencher: &mut Bencher) {
     let executable =
         Executable::<TestContextObject>::from_elf(&elf, Arc::new(BuiltinProgram::new_mock()))
             .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
     executable.jit_compile().unwrap();
     let mut context_object = TestContextObject::default();
     create_vm!(
@@ -91,7 +94,9 @@ fn bench_jit_vs_interpreter(
         Arc::new(BuiltinProgram::new_loader(config)),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
     executable.jit_compile().unwrap();
     let mut context_object = TestContextObject::default();
     let mem_region = MemoryRegion::new_writable(mem, ebpf::MM_INPUT_START);
@@ -297,7 +302,9 @@ fn bench_mem_ldxdw_jit(bencher: &mut Bencher) {
     let executable =
         assemble::<TestContextObject>(&assembly, Arc::new(BuiltinProgram::new_loader(config)))
             .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
     executable.jit_compile().unwrap();
 
     let mut context_object = TestContextObject::default();

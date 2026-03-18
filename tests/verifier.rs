@@ -8,15 +8,15 @@
 // the MIT license <http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-// The tests contained in this file are extracted from the unit tests of uBPF software. Each test
-// in this file has a name in the form `test_verifier_<name>`, and corresponds to the
-// (human-readable) code in `ubpf/tree/master/tests/<name>`, available at
-// <https://github.com/iovisor/ubpf/tree/master/tests> (hyphen had to be replaced with underscores
-// as Rust will not accept them in function names). It is strongly advised to refer to the uBPF
-// version to understand what these program do.
+// The tests contained in this file are extracted from the unit tests of uBPF
+// software. Each test in this file has a name in the form
+// `test_verifier_<name>`, and corresponds to the (human-readable) code in
+// `ubpf/tree/master/tests/<name>`, available at <https://github.com/iovisor/ubpf/tree/master/tests> (hyphen had to be replaced with underscores
+// as Rust will not accept them in function names). It is strongly advised to
+// refer to the uBPF version to understand what these program do.
 //
-// Each program was assembled from the uBPF version with the assembler provided by uBPF itself, and
-// available at <https://github.com/iovisor/ubpf/tree/master/ubpf>.
+// Each program was assembled from the uBPF version with the assembler provided
+// by uBPF itself, and available at <https://github.com/iovisor/ubpf/tree/master/ubpf>.
 // The very few modifications that have been realized should be indicated.
 
 // These are unit tests for the eBPF “verifier”.
@@ -24,18 +24,20 @@
 extern crate solana_sbpf;
 extern crate thiserror;
 
-use solana_sbpf::{
-    assembler::assemble,
-    ebpf,
-    elf::Executable,
-    metrics::VerifyMetrics,
-    program::{BuiltinFunctionDefinition, BuiltinProgram, FunctionRegistry, SBPFVersion},
-    verifier::{RequisiteVerifier, Verifier, VerifierError},
-    vm::Config,
+use {
+    solana_sbpf::{
+        assembler::assemble,
+        ebpf,
+        elf::Executable,
+        metrics::VerifyMetrics,
+        program::{BuiltinFunctionDefinition, BuiltinProgram, FunctionRegistry, SBPFVersion},
+        verifier::{RequisiteVerifier, Verifier, VerifierError},
+        vm::Config,
+    },
+    std::sync::Arc,
+    test_utils::{assert_error, create_vm, syscalls, TestContextObject},
+    thiserror::Error,
 };
-use std::sync::Arc;
-use test_utils::{assert_error, create_vm, syscalls, TestContextObject};
-use thiserror::Error;
 
 /// Error definitions
 #[derive(Debug, Error)]
@@ -77,7 +79,9 @@ fn test_verifier_success() {
         Arc::new(BuiltinProgram::new_mock()),
     )
     .unwrap();
-    executable.verify::<TautologyVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<TautologyVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
     let mut context_object = TestContextObject::default();
     create_vm!(
         _vm,
@@ -100,7 +104,9 @@ fn test_verifier_fail() {
         Arc::new(BuiltinProgram::new_mock()),
     )
     .unwrap();
-    executable.verify::<ContradictionVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<ContradictionVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -115,7 +121,9 @@ fn test_verifier_err_div_by_zero_imm() {
         Arc::new(BuiltinProgram::new_mock()),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -134,7 +142,9 @@ fn test_verifier_err_endian_size() {
         FunctionRegistry::default(),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -153,7 +163,9 @@ fn test_verifier_err_incomplete_lddw() {
         FunctionRegistry::default(),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -171,7 +183,9 @@ fn test_verifier_err_lddw_cannot_be_last() {
             FunctionRegistry::default(),
         )
         .unwrap();
-        executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+        executable
+            .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+            .unwrap();
     }
 }
 
@@ -185,7 +199,9 @@ fn test_verifier_err_invalid_reg_dst() {
         Arc::new(BuiltinProgram::new_mock()),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -198,7 +214,9 @@ fn test_verifier_err_invalid_reg_src() {
         Arc::new(BuiltinProgram::new_mock()),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -215,7 +233,9 @@ fn test_verifier_resize_stack_ptr_success() {
         })),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -231,7 +251,9 @@ fn test_verifier_negative_unaligned_stack() {
         })),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -247,7 +269,9 @@ fn test_verifier_positive_unaligned_stack() {
         })),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -264,7 +288,9 @@ fn test_verifier_err_jmp_lddw() {
         })),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -280,7 +306,9 @@ fn test_verifier_call_into_lddw() {
         })),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -298,7 +326,9 @@ fn test_verifier_err_callx_cannot_use_r10() {
             })),
         )
         .unwrap();
-        executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+        executable
+            .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+            .unwrap();
     }
 }
 
@@ -313,7 +343,9 @@ fn test_verifier_err_jmp_out() {
         Arc::new(BuiltinProgram::new_mock()),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -327,7 +359,9 @@ fn test_verifier_err_jmp_out_start() {
         Arc::new(BuiltinProgram::new_mock()),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -347,7 +381,9 @@ fn test_verifier_known_syscall() {
         FunctionRegistry::default(),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -365,7 +401,9 @@ fn test_verifier_err_add_r10() {
         FunctionRegistry::default(),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]
@@ -379,7 +417,9 @@ fn test_verifier_err_write_r10() {
         Arc::new(BuiltinProgram::new_mock()),
     )
     .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
 }
 
 #[test]

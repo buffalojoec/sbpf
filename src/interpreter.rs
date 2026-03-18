@@ -119,7 +119,8 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
         }
     }
 
-    /// Translate between the virtual machines' pc value and the pc value used by the debugger
+    /// Translate between the virtual machines' pc value and the pc value used
+    /// by the debugger
     #[cfg(feature = "debugger")]
     pub fn get_dbg_pc(&self) -> u64 {
         (self.reg[11] * ebpf::INSN_SIZE as u64) + self.executable.get_text_section_offset()

@@ -7,28 +7,28 @@
 
 //! This module translates eBPF assembly language to binary.
 
-use self::InstructionType::{
-    AluBinary, AluUnary, CallImm, CallReg, Endian, JumpConditional, JumpUnconditional, LoadDwImm,
-    LoadReg, NoOperand, StoreImm, StoreReg, Syscall,
-};
-use crate::{
-    asm_parser::{
-        parse,
-        Operand::{Integer, Label, Memory, Register},
-        Statement,
-    },
-    ebpf::{self, Insn},
-    elf::Executable,
-    program::{BuiltinProgram, FunctionRegistry, SBPFVersion},
-    vm::ContextObject,
-};
-use std::collections::HashMap;
-
-#[cfg(not(feature = "shuttle-test"))]
-use std::sync::Arc;
-
 #[cfg(feature = "shuttle-test")]
 use shuttle::sync::Arc;
+#[cfg(not(feature = "shuttle-test"))]
+use std::sync::Arc;
+use {
+    self::InstructionType::{
+        AluBinary, AluUnary, CallImm, CallReg, Endian, JumpConditional, JumpUnconditional,
+        LoadDwImm, LoadReg, NoOperand, StoreImm, StoreReg, Syscall,
+    },
+    crate::{
+        asm_parser::{
+            parse,
+            Operand::{Integer, Label, Memory, Register},
+            Statement,
+        },
+        ebpf::{self, Insn},
+        elf::Executable,
+        program::{BuiltinProgram, FunctionRegistry, SBPFVersion},
+        vm::ContextObject,
+    },
+    std::collections::HashMap,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum InstructionType {

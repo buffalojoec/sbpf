@@ -1,33 +1,40 @@
 //! Debugger for the virtual machines' interpreter.
 
-use std::net::{TcpListener, TcpStream};
-
-use gdbstub::common::Signal;
-use gdbstub::conn::ConnectionExt;
-use gdbstub::stub::{state_machine, GdbStub, SingleThreadStopReason};
-
-use gdbstub::arch::lldb::{Encoding, Format, Generic, Register};
-use gdbstub::arch::RegId;
-
-use gdbstub::target::{ext::monitor_cmd::MonitorCmd, Target, TargetError, TargetResult};
-use gdbstub::{outputln, target};
-
-use core::convert::TryInto;
-
-use bpf_arch::reg::id::BpfRegId;
-use bpf_arch::reg::BpfRegs;
-use bpf_arch::Bpf;
-use gdbstub::target::ext::base::singlethread::{SingleThreadBase, SingleThreadResume};
-use gdbstub::target::ext::lldb_register_info_override::{Callback, CallbackToken};
-use gdbstub::target::ext::section_offsets::Offsets;
-
-use crate::program::SBPFVersion;
-use crate::{
-    ebpf,
-    error::{EbpfError, ProgramResult},
-    interpreter::{DebugState, Interpreter},
-    memory_region::AccessType,
-    vm::ContextObject,
+use {
+    crate::{
+        ebpf,
+        error::{EbpfError, ProgramResult},
+        interpreter::{DebugState, Interpreter},
+        memory_region::AccessType,
+        program::SBPFVersion,
+        vm::ContextObject,
+    },
+    bpf_arch::{
+        reg::{id::BpfRegId, BpfRegs},
+        Bpf,
+    },
+    core::convert::TryInto,
+    gdbstub::{
+        arch::{
+            lldb::{Encoding, Format, Generic, Register},
+            RegId,
+        },
+        common::Signal,
+        conn::ConnectionExt,
+        outputln,
+        stub::{state_machine, GdbStub, SingleThreadStopReason},
+        target::{
+            self,
+            ext::{
+                base::singlethread::{SingleThreadBase, SingleThreadResume},
+                lldb_register_info_override::{Callback, CallbackToken},
+                monitor_cmd::MonitorCmd,
+                section_offsets::Offsets,
+            },
+            Target, TargetError, TargetResult,
+        },
+    },
+    std::net::{TcpListener, TcpStream},
 };
 
 type DynResult<T> = Result<T, Box<dyn std::error::Error>>;
@@ -221,7 +228,8 @@ impl<'a, 'b, C: ContextObject> SingleThreadBase for Interpreter<'a, 'b, C> {
         for (vm_addr, val) in (start_addr..).zip(data.iter_mut()) {
             let host_ptr = match get_host_ptr(self, vm_addr) {
                 Ok(host_ptr) => host_ptr,
-                // The debugger is sometimes requesting more data than we have access to, just skip these
+                // The debugger is sometimes requesting more data than we have access to, just skip
+                // these
                 _ => continue,
             };
             *val = unsafe { *host_ptr as u8 };
@@ -460,9 +468,7 @@ mod bpf_arch {
         pub use bpf::BpfRegs;
 
         mod bpf {
-            use core::convert::TryInto;
-
-            use gdbstub::arch::Registers;
+            use {core::convert::TryInto, gdbstub::arch::Registers};
 
             /// BPF registers.
             ///
@@ -536,9 +542,7 @@ mod bpf_arch {
             }
         }
         pub mod id {
-            use core::num::NonZeroUsize;
-
-            use gdbstub::arch::RegId;
+            use {core::num::NonZeroUsize, gdbstub::arch::RegId};
 
             /// BPF register identifier.
             #[derive(Debug, Clone, Copy)]
@@ -621,7 +625,8 @@ impl<'a, 'b, C: ContextObject>
             _ => return Err(TargetError::NonFatal),
         };
 
-        // Copy the range of `data` (start at `offset` with a size of `length`) to `buf`.
+        // Copy the range of `data` (start at `offset` with a size of `length`) to
+        // `buf`.
         let data = xml.trim().as_bytes();
         let offset = offset as usize;
         if offset > data.len() {

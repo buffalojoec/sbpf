@@ -17,32 +17,33 @@
 use rand::{thread_rng, Rng};
 #[cfg(feature = "shuttle-test")]
 use shuttle::rand::{thread_rng, Rng};
-
-use rand::{
-    distributions::{Distribution, Uniform},
-    rngs::SmallRng,
-    SeedableRng,
-};
-use std::{fmt::Debug, mem, ptr};
-
-use crate::{
-    ebpf::{self, FIRST_SCRATCH_REG, FRAME_PTR_REG, INSN_SIZE, SCRATCH_REGS},
-    elf::Executable,
-    error::{EbpfError, ProgramResult},
-    memory_management::{
-        allocate_pages, free_pages, get_system_page_size, protect_pages, round_to_page_size,
+use {
+    crate::{
+        ebpf::{self, FIRST_SCRATCH_REG, FRAME_PTR_REG, INSN_SIZE, SCRATCH_REGS},
+        elf::Executable,
+        error::{EbpfError, ProgramResult},
+        memory_management::{
+            allocate_pages, free_pages, get_system_page_size, protect_pages, round_to_page_size,
+        },
+        memory_region::MemoryMapping,
+        program::BuiltinFunction,
+        vm::{get_runtime_environment_key, Config, ContextObject, EbpfVm, RuntimeEnvironmentSlot},
+        x86::{
+            FenceType, X86IndirectAccess, X86Instruction,
+            X86Register::{self, *},
+            ARGUMENT_REGISTERS, CALLEE_SAVED_REGISTERS, CALLER_SAVED_REGISTERS,
+        },
     },
-    memory_region::MemoryMapping,
-    program::BuiltinFunction,
-    vm::{get_runtime_environment_key, Config, ContextObject, EbpfVm, RuntimeEnvironmentSlot},
-    x86::{
-        FenceType, X86IndirectAccess, X86Instruction,
-        X86Register::{self, *},
-        ARGUMENT_REGISTERS, CALLEE_SAVED_REGISTERS, CALLER_SAVED_REGISTERS,
+    rand::{
+        distributions::{Distribution, Uniform},
+        rngs::SmallRng,
+        SeedableRng,
     },
+    std::{fmt::Debug, mem, ptr},
 };
 
-/// The maximum machine code length in bytes of a program with no guest instructions
+/// The maximum machine code length in bytes of a program with no guest
+/// instructions
 pub const MAX_EMPTY_PROGRAM_MACHINE_CODE_LENGTH: usize = 4096;
 /// The maximum machine code length in bytes of a single guest instruction
 pub const MAX_MACHINE_CODE_LENGTH_PER_INSTRUCTION: usize = 110;

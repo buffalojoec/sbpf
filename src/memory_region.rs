@@ -1,13 +1,15 @@
 //! This module defines memory regions
 
-use crate::{
-    aligned_memory::Pod,
-    ebpf,
-    error::{EbpfError, ProgramResult},
-    program::SBPFVersion,
-    vm::Config,
+use {
+    crate::{
+        aligned_memory::Pod,
+        ebpf,
+        error::{EbpfError, ProgramResult},
+        program::SBPFVersion,
+        vm::Config,
+    },
+    std::{array, cell::UnsafeCell, fmt, mem, ops::Range, ptr},
 };
-use std::{array, cell::UnsafeCell, fmt, mem, ops::Range, ptr};
 
 /* Explanation of the Gapped Memory
 
@@ -311,14 +313,14 @@ impl<'a> UnalignedMemoryMapping {
     #[inline(always)]
     pub fn find_region(&self, vm_addr: u64) -> Option<(usize, &MemoryRegion)> {
         // Safety:
-        // &mut references to the mapping cache are only created internally from methods that do not
-        // invoke each other. UnalignedMemoryMapping is !Sync, so the cache reference below is
-        // guaranteed to be unique.
+        // &mut references to the mapping cache are only created internally from methods
+        // that do not invoke each other. UnalignedMemoryMapping is !Sync, so
+        // the cache reference below is guaranteed to be unique.
         let cache = unsafe { &mut *self.cache.get() };
         if let Some(index) = cache.find(vm_addr) {
             // Safety:
-            // Cached index, we validated it before caching it. See the corresponding safety section
-            // in the miss branch.
+            // Cached index, we validated it before caching it. See the corresponding safety
+            // section in the miss branch.
             Some((index, unsafe { self.common.regions.get_unchecked(index) }))
         } else {
             let mut index = 1;
@@ -506,7 +508,8 @@ impl MemoryMapping {
 
     /// Creates a new memory mapping for tests and benches.
     ///
-    /// `access_violation_handler` defaults to a function which always returns an error.
+    /// `access_violation_handler` defaults to a function which always returns
+    /// an error.
     pub fn new(
         regions: Vec<MemoryRegion>,
         config: &Config,
@@ -535,7 +538,8 @@ impl MemoryMapping {
         common.generate_access_violation(access_type, vm_addr, len)
     }
 
-    /// Map virtual memory to host memory and potentially call the [AccessViolationHandler].
+    /// Map virtual memory to host memory and potentially call the
+    /// [AccessViolationHandler].
     ///
     /// This requires the [MemoryMapping] to be mutable and
     /// can cause previously translated addresses to become invalid.
@@ -699,10 +703,11 @@ impl MappingCache {
 
 #[cfg(test)]
 mod test {
-    use std::{cell::RefCell, rc::Rc};
-    use test_utils::assert_error;
-
-    use super::*;
+    use {
+        super::*,
+        std::{cell::RefCell, rc::Rc},
+        test_utils::assert_error,
+    };
 
     #[test]
     fn test_mapping_cache() {
@@ -1384,8 +1389,8 @@ mod test {
                 &config,
                 SBPFVersion::V3,
                 Box::new(move |region, _, _, _, _| {
-                    // check that the argument passed to MemoryRegion::new_readonly is then passed to the
-                    // callback
+                    // check that the argument passed to MemoryRegion::new_readonly is then passed
+                    // to the callback
                     assert_eq!(region.access_violation_handler_payload, Some(42));
                     c.borrow_mut().extend_from_slice(&original1);
                     region.writable = true;

@@ -2,39 +2,39 @@
 
 // Note: Typically ELF shared objects are loaded using the program headers and
 // not the section headers.  Since we are leveraging the elfkit crate its much
-// easier to use the section headers.  There are cases (reduced size, obfuscation)
-// where the section headers may be removed from the ELF.  If that happens then
-// this loader will need to be re-written to use the program headers instead.
-
-use crate::{
-    aligned_memory::{is_memory_aligned, AlignedMemory},
-    ebpf::{self, HOST_ALIGN, INSN_SIZE},
-    elf_parser::{
-        consts::{
-            ELFCLASS64, ELFDATA2LSB, ELFOSABI_NONE, EM_BPF, EM_SBPF, ET_DYN, R_X86_64_32,
-            R_X86_64_64, R_X86_64_NONE, R_X86_64_RELATIVE,
-        },
-        types::{Elf64Phdr, Elf64Shdr, Elf64Word},
-        Elf64, ElfParserError,
-    },
-    error::EbpfError,
-    memory_region::MemoryRegion,
-    metrics::{LoadMetrics, VerifyMetrics},
-    program::{BuiltinProgram, FunctionRegistry, SBPFVersion},
-    verifier::Verifier,
-    vm::{Config, ContextObject},
-};
+// easier to use the section headers.  There are cases (reduced size,
+// obfuscation) where the section headers may be removed from the ELF.  If that
+// happens then this loader will need to be re-written to use the program
+// headers instead.
 
 #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
 use crate::jit::{JitCompiler, JitProgram};
-use byteorder::{ByteOrder, LittleEndian};
-use std::{collections::BTreeMap, fmt::Debug, mem, ops::Range, str, time::Instant};
-
-#[cfg(not(feature = "shuttle-test"))]
-use std::sync::Arc;
-
 #[cfg(feature = "shuttle-test")]
 use shuttle::sync::Arc;
+#[cfg(not(feature = "shuttle-test"))]
+use std::sync::Arc;
+use {
+    crate::{
+        aligned_memory::{is_memory_aligned, AlignedMemory},
+        ebpf::{self, HOST_ALIGN, INSN_SIZE},
+        elf_parser::{
+            consts::{
+                ELFCLASS64, ELFDATA2LSB, ELFOSABI_NONE, EM_BPF, EM_SBPF, ET_DYN, R_X86_64_32,
+                R_X86_64_64, R_X86_64_NONE, R_X86_64_RELATIVE,
+            },
+            types::{Elf64Phdr, Elf64Shdr, Elf64Word},
+            Elf64, ElfParserError,
+        },
+        error::EbpfError,
+        memory_region::MemoryRegion,
+        metrics::{LoadMetrics, VerifyMetrics},
+        program::{BuiltinProgram, FunctionRegistry, SBPFVersion},
+        verifier::Verifier,
+        vm::{Config, ContextObject},
+    },
+    byteorder::{ByteOrder, LittleEndian},
+    std::{collections::BTreeMap, fmt::Debug, mem, ops::Range, str, time::Instant},
+};
 
 /// Error definitions
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -315,7 +315,8 @@ impl<C: ContextObject> Executable<C> {
         }
     }
 
-    /// Get a memory region that can be used to access the merged readonly section
+    /// Get a memory region that can be used to access the merged readonly
+    /// section
     pub fn get_ro_region(&self) -> MemoryRegion {
         get_ro_region(&self.ro_section, self.elf_bytes.as_slice())
     }
@@ -338,8 +339,8 @@ impl<C: ContextObject> Executable<C> {
 
     /// Get the JIT compiled program
     ///
-    /// This function will not block the calling thread even if there is a concurrent ongoing call
-    /// to [`Self::jit_compile`].
+    /// This function will not block the calling thread even if there is a
+    /// concurrent ongoing call to [`Self::jit_compile`].
     #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
     pub fn get_compiled_program(&self) -> Option<Arc<JitProgram>> {
         let guard = self
@@ -350,10 +351,7 @@ impl<C: ContextObject> Executable<C> {
     }
 
     /// Verify the executable
-    pub fn verify<V: Verifier>(
-        &self,
-        metrics: &mut VerifyMetrics,
-    ) -> Result<(), EbpfError> {
+    pub fn verify<V: Verifier>(&self, metrics: &mut VerifyMetrics) -> Result<(), EbpfError> {
         <V as Verifier>::verify(
             self.get_text_bytes().1,
             self.get_config(),
@@ -365,15 +363,16 @@ impl<C: ContextObject> Executable<C> {
 
     /// JIT compile the executable
     ///
-    /// This function does not ensure fully sequentially consistent execution ordering between calls
-    /// to it and related calls such as [`Self::get_compiled_program`] or
-    /// [`Self::take_compiled_program`].
+    /// This function does not ensure fully sequentially consistent execution
+    /// ordering between calls to it and related calls such as
+    /// [`Self::get_compiled_program`] or [`Self::take_compiled_program`].
     ///
-    /// This means that there can be some non-trivial interactions in ordering between calls to this
-    /// function and a `get_compiled_program`: concurrent calls to `get_compiled_program` will
-    /// return the previous compiled program or `None` for the duration of the compilation process
-    /// and is only guaranteed to start returning the newly compiled `JitProgram` after this
-    /// function returns.
+    /// This means that there can be some non-trivial interactions in ordering
+    /// between calls to this function and a `get_compiled_program`:
+    /// concurrent calls to `get_compiled_program` will return the previous
+    /// compiled program or `None` for the duration of the compilation process
+    /// and is only guaranteed to start returning the newly compiled
+    /// `JitProgram` after this function returns.
     #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
     pub fn jit_compile(&self) -> Result<(), crate::error::EbpfError> {
         let jit = JitCompiler::<C>::new(self)?;
@@ -388,9 +387,10 @@ impl<C: ContextObject> Executable<C> {
 
     /// Remove the compiled program.
     ///
-    /// Note that the results can be unpredictable in presence of concurrent ongoing calls to
-    /// [`Self::jit_compile`]: based on exact execution ordering this function may take out the
-    /// previous program (or `None`) that shorly afterwards gets replaced by a compiled program.
+    /// Note that the results can be unpredictable in presence of concurrent
+    /// ongoing calls to [`Self::jit_compile`]: based on exact execution
+    /// ordering this function may take out the previous program (or `None`)
+    /// that shorly afterwards gets replaced by a compiled program.
     #[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
     pub fn take_compiled_program(&self) -> Option<Arc<JitProgram>> {
         let mut guard = self
@@ -1282,8 +1282,9 @@ pub fn get_ro_region(ro_section: &Section, elf: &[u8]) -> MemoryRegion {
         Section::Borrowed(offset, byte_range) => (*offset, &elf[byte_range.clone()]),
     };
 
-    // If offset > 0, the region will start at ebpf::MM_REGION_SIZE * 1 + the offset of
-    // the first read only byte. [ebpf::MM_REGION_SIZE * 1, ebpf::MM_REGION_SIZE * 1 + offset)
-    // will be unmappable, see MemoryRegion::vm_to_host.
+    // If offset > 0, the region will start at ebpf::MM_REGION_SIZE * 1 + the offset
+    // of the first read only byte. [ebpf::MM_REGION_SIZE * 1,
+    // ebpf::MM_REGION_SIZE * 1 + offset) will be unmappable, see
+    // MemoryRegion::vm_to_host.
     MemoryRegion::new_readonly(ro_data, offset as u64)
 }

@@ -1,12 +1,14 @@
 #![allow(clippy::literal_string_with_formatting_args)]
 
-use solana_sbpf::{
-    elf::Executable,
-    program::{BuiltinFunctionDefinition, BuiltinProgram},
-    vm::{Config, RuntimeEnvironmentSlot},
+use {
+    solana_sbpf::{
+        elf::Executable,
+        program::{BuiltinFunctionDefinition, BuiltinProgram},
+        vm::{Config, RuntimeEnvironmentSlot},
+    },
+    std::{fs::File, io::Read, sync::Arc},
+    test_utils::{create_vm, syscalls, TestContextObject},
 };
-use std::{fs::File, io::Read, sync::Arc};
-use test_utils::{create_vm, syscalls, TestContextObject};
 
 #[test]
 fn test_runtime_environment_slots() {
@@ -70,11 +72,15 @@ fn test_builtin_program_eq() {
 #[cfg(feature = "debugger")]
 #[test]
 fn test_gdbstub_architecture() {
-    use byteorder::{ReadBytesExt, WriteBytesExt};
-    use solana_sbpf::vm::ExecutionMode;
-    use std::io::{BufRead, BufReader, Write};
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use std::time::Duration;
+    use {
+        byteorder::{ReadBytesExt, WriteBytesExt},
+        solana_sbpf::vm::ExecutionMode,
+        std::{
+            io::{BufRead, BufReader, Write},
+            net::{IpAddr, Ipv4Addr, SocketAddr},
+            time::Duration,
+        },
+    };
 
     const GDBSTUB_TEST_DEBUG_PORT: &'static str = "11212";
     const METADATA: &'static str = "6CSmiViMaAguKgxNVwU8TWMPViQbtL5KKoFrDwWwtYNR";

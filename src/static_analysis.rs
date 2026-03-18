@@ -1,16 +1,18 @@
 #![allow(clippy::arithmetic_side_effects)]
 //! Static Byte Code Analysis
 
-use crate::disassembler::disassemble_instruction;
-use crate::{
-    ebpf,
-    elf::Executable,
-    error::EbpfError,
-    program::SBPFVersion,
-    vm::{ContextObject, DynamicAnalysis},
+use {
+    crate::{
+        disassembler::disassemble_instruction,
+        ebpf,
+        elf::Executable,
+        error::EbpfError,
+        program::SBPFVersion,
+        vm::{ContextObject, DynamicAnalysis},
+    },
+    rustc_demangle::demangle,
+    std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };
-use rustc_demangle::demangle;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// Register state recorded after executing one instruction
 ///
@@ -71,7 +73,8 @@ pub struct CfgNode {
 pub enum DfgNode {
     /// Points to a single instruction
     InstructionNode(usize),
-    /// Points to a basic block which starts with a Φ node (because it has multiple CFG sources)
+    /// Points to a basic block which starts with a Φ node (because it has
+    /// multiple CFG sources)
     PhiNode(usize),
 }
 
@@ -190,7 +193,8 @@ impl<'a> Analysis<'a> {
             insn_ptr += 1;
         }
         let mut result = Self {
-            // Removes the generic ContextObject which is safe because we are not going to execute the program
+            // Removes the generic ContextObject which is safe because we are not going to execute
+            // the program
             executable: unsafe {
                 std::mem::transmute::<&Executable<C>, &Executable<DummyContextObject>>(executable)
             },
@@ -527,7 +531,8 @@ impl<'a> Analysis<'a> {
         Ok(())
     }
 
-    /// Iterates over the cfg_nodes while providing the PC range of the function they belong to.
+    /// Iterates over the cfg_nodes while providing the PC range of the function
+    /// they belong to.
     pub fn iter_cfg_by_function(
         &self,
     ) -> impl Iterator<Item = (std::ops::Range<usize>, usize, &CfgNode)> + '_ {
@@ -570,25 +575,32 @@ impl<'a> Analysis<'a> {
             cfg_node_start: usize,
         ) -> std::io::Result<()> {
             let cfg_node = &analysis.cfg_nodes[&cfg_node_start];
-            writeln!(output, "    lbb_{} [label=<<table border=\"0\" cellborder=\"0\" cellpadding=\"3\">{}</table>>];",
+            writeln!(
+                output,
+                "    lbb_{} [label=<<table border=\"0\" cellborder=\"0\" \
+                 cellpadding=\"3\">{}</table>>];",
                 cfg_node_start,
-                analysis.instructions[cfg_node.instructions.clone()].iter()
-                .enumerate().map(|(pc, insn)| {
-                    let desc = analysis.disassemble_instruction(
-                        insn, pc
-                    );
-                    if let Some(split_index) = desc.find(' ') {
-                        let mut rest = desc[split_index+1..].to_string();
-                        if rest.len() > MAX_CELL_CONTENT_LENGTH + 1 {
-                            rest.truncate(MAX_CELL_CONTENT_LENGTH);
-                            rest = format!("{rest}…");
+                analysis.instructions[cfg_node.instructions.clone()]
+                    .iter()
+                    .enumerate()
+                    .map(|(pc, insn)| {
+                        let desc = analysis.disassemble_instruction(insn, pc);
+                        if let Some(split_index) = desc.find(' ') {
+                            let mut rest = desc[split_index + 1..].to_string();
+                            if rest.len() > MAX_CELL_CONTENT_LENGTH + 1 {
+                                rest.truncate(MAX_CELL_CONTENT_LENGTH);
+                                rest = format!("{rest}…");
+                            }
+                            format!(
+                                "<tr><td align=\"left\">{}</td><td align=\"left\">{}</td></tr>",
+                                html_escape(&desc[..split_index]),
+                                html_escape(&rest)
+                            )
+                        } else {
+                            format!("<tr><td align=\"left\">{}</td></tr>", html_escape(&desc))
                         }
-                        format!("<tr><td align=\"left\">{}</td><td align=\"left\">{}</td></tr>", html_escape(&desc[..split_index]), html_escape(&rest))
-                    } else {
-                        format!("<tr><td align=\"left\">{}</td></tr>", html_escape(&desc))
-                    }
-                })
-                .collect::<String>()
+                    })
+                    .collect::<String>()
             )?;
             if let Some(dynamic_analysis) = dynamic_analysis {
                 if let Some(recorded_edges) = dynamic_analysis.edges.get(&cfg_node_start) {
@@ -938,7 +950,8 @@ impl<'a> Analysis<'a> {
         }
     }
 
-    /// Connect the dependencies between the instructions inside of the basic blocks
+    /// Connect the dependencies between the instructions inside of the basic
+    /// blocks
     pub fn intra_basic_block_data_flow(
         &mut self,
         sbpf_version: SBPFVersion,

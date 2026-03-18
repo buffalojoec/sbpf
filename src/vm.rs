@@ -12,37 +12,39 @@
 
 //! Virtual machine for eBPF programs.
 
-use crate::{
-    ebpf,
-    elf::Executable,
-    error::{EbpfError, ProgramResult},
-    interpreter::Interpreter,
-    memory_region::MemoryMapping,
-    metrics::LoadMetrics,
-    program::{BuiltinFunction, BuiltinProgram, FunctionRegistry, SBPFVersion},
-    static_analysis::{Analysis, DummyContextObject, RegisterTraceEntry},
-};
-use std::{collections::BTreeMap, fmt::Debug, mem::offset_of};
-
-#[cfg(feature = "shuttle-test")]
-use shuttle::sync::Arc;
-#[cfg(not(feature = "shuttle-test"))]
-use std::sync::Arc;
-
 #[cfg(all(feature = "jit", not(feature = "shuttle-test")))]
 use rand::{thread_rng, Rng};
 #[cfg(all(feature = "jit", feature = "shuttle-test"))]
 use shuttle::rand::{thread_rng, Rng};
+#[cfg(feature = "shuttle-test")]
+use shuttle::sync::Arc;
+#[cfg(not(feature = "shuttle-test"))]
+use std::sync::Arc;
+use {
+    crate::{
+        ebpf,
+        elf::Executable,
+        error::{EbpfError, ProgramResult},
+        interpreter::Interpreter,
+        memory_region::MemoryMapping,
+        metrics::LoadMetrics,
+        program::{BuiltinFunction, BuiltinProgram, FunctionRegistry, SBPFVersion},
+        static_analysis::{Analysis, DummyContextObject, RegisterTraceEntry},
+    },
+    std::{collections::BTreeMap, fmt::Debug, mem::offset_of},
+};
 
 /// Shift the RUNTIME_ENVIRONMENT_KEY by this many bits to the LSB
 ///
-/// 3 bits for 8 Byte alignment, and 1 bit to have encoding space for the RuntimeEnvironment.
+/// 3 bits for 8 Byte alignment, and 1 bit to have encoding space for the
+/// RuntimeEnvironment.
 #[cfg(feature = "jit")]
 const PROGRAM_ENVIRONMENT_KEY_SHIFT: u32 = 4;
 #[cfg(feature = "jit")]
 static RUNTIME_ENVIRONMENT_KEY: std::sync::OnceLock<i32> = std::sync::OnceLock::<i32>::new();
 
-/// Returns (and if not done before generates) the encryption key for the VM pointer
+/// Returns (and if not done before generates) the encryption key for the VM
+/// pointer
 pub fn get_runtime_environment_key() -> i32 {
     #[cfg(feature = "jit")]
     {
@@ -70,13 +72,16 @@ pub enum ExecutionMode {
 pub struct Config {
     /// Maximum call depth
     pub max_call_depth: usize,
-    /// Size of a stack frame in bytes, must match the size specified in the LLVM BPF backend
+    /// Size of a stack frame in bytes, must match the size specified in the
+    /// LLVM BPF backend
     pub stack_frame_size: usize,
-    /// Enables the use of MemoryMapping and MemoryRegion for address translation
+    /// Enables the use of MemoryMapping and MemoryRegion for address
+    /// translation
     pub enable_address_translation: bool,
     /// Enables gaps in VM address space between the stack frames
     pub enable_stack_frame_gaps: bool,
-    /// Maximal pc distance after which a new instruction meter validation is emitted by the JIT
+    /// Maximal pc distance after which a new instruction meter validation is
+    /// emitted by the JIT
     pub instruction_meter_checkpoint_distance: usize,
     /// Enable instruction meter and limiting
     pub enable_instruction_meter: bool,
@@ -84,13 +89,15 @@ pub struct Config {
     pub enable_register_tracing: bool,
     /// Enable dynamic string allocation for labels
     pub enable_symbol_and_section_labels: bool,
-    /// Reject ELF files containing issues that the verifier did not catch before (up to v0.2.21)
+    /// Reject ELF files containing issues that the verifier did not catch
+    /// before (up to v0.2.21)
     pub reject_broken_elfs: bool,
     #[cfg(feature = "jit")]
     /// Ratio of native host instructions per random no-op in JIT (0 = OFF)
     pub noop_instruction_rate: u32,
     #[cfg(feature = "jit")]
-    /// Enable disinfection of immediate values and offsets provided by the user in JIT
+    /// Enable disinfection of immediate values and offsets provided by the user
+    /// in JIT
     pub sanitize_user_provided_values: bool,
     /// Avoid copying read only sections when possible
     pub optimize_rodata: bool,
@@ -137,8 +144,7 @@ impl Default for Config {
 impl<C: ContextObject> Executable<C> {
     /// Creates an executable from an ELF file
     pub fn from_elf(elf_bytes: &[u8], loader: Arc<BuiltinProgram<C>>) -> Result<Self, EbpfError> {
-        let executable =
-            Executable::load(elf_bytes, loader, &mut LoadMetrics::default())?;
+        let executable = Executable::load(elf_bytes, loader, &mut LoadMetrics::default())?;
         Ok(executable)
     }
     /// Creates an executable from machine code
@@ -374,10 +380,12 @@ impl<'a, C: ContextObject> EbpfVm<'a, C> {
 
     /// Execute the program
     ///
-    /// Use `mode` parameter to request a specific execution type. This function will write back
-    /// the execution mode used back to the reference passed in.
+    /// Use `mode` parameter to request a specific execution type. This function
+    /// will write back the execution mode used back to the reference passed
+    /// in.
     ///
-    /// Returns the instruction meter count (CUs) and the execution result of the program.
+    /// Returns the instruction meter count (CUs) and the execution result of
+    /// the program.
     pub fn execute_program(
         &mut self,
         executable: &Executable<C>,

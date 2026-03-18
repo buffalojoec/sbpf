@@ -9,25 +9,29 @@
 // the MIT license <http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-//! This module implements some built-in syscalls that can be called from within an eBPF program.
+//! This module implements some built-in syscalls that can be called from within
+//! an eBPF program.
 //!
 //! These syscalls may originate from several places:
 //!
 //! * Some of them mimic the syscalls available in the Linux kernel.
-//! * Some of them were proposed as example syscalls in uBPF and they were adapted here.
+//! * Some of them were proposed as example syscalls in uBPF and they were
+//!   adapted here.
 //! * Other syscalls may be specific to sbpf.
 //!
-//! The prototype for syscalls is always the same: five `u64` as arguments, and a `u64` as a return
-//! value. Hence some syscalls have unused arguments, or return a 0 value in all cases, in order to
-//! respect this convention.
+//! The prototype for syscalls is always the same: five `u64` as arguments, and
+//! a `u64` as a return value. Hence some syscalls have unused arguments, or
+//! return a 0 value in all cases, in order to respect this convention.
 
-use crate::TestContextObject;
-use solana_sbpf::{
-    declare_builtin_function,
-    error::EbpfError,
-    memory_region::{AccessType, MemoryMapping},
+use {
+    crate::TestContextObject,
+    solana_sbpf::{
+        declare_builtin_function,
+        error::EbpfError,
+        memory_region::{AccessType, MemoryMapping},
+    },
+    std::{slice::from_raw_parts, str::from_utf8},
 };
-use std::{slice::from_raw_parts, str::from_utf8};
 
 declare_builtin_function!(
     /// Prints its **last three** arguments to standard output. The **first two** arguments are

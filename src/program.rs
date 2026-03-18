@@ -93,8 +93,8 @@ impl SBPFVersion {
         self >= SBPFVersion::V3
     }
 
-    /// Calculate the target program counter for a CALL_IMM instruction depending on
-    /// the SBPF version.
+    /// Calculate the target program counter for a CALL_IMM instruction
+    /// depending on the SBPF version.
     pub fn calculate_call_imm_target_pc(self, pc: usize, imm: i64) -> u32 {
         if self.static_syscalls() {
             (pc as i64).saturating_add(imm).saturating_add(1) as u32
@@ -309,7 +309,8 @@ impl<C: ContextObject> BuiltinProgram<C> {
 
     /// Register a function both in the sparse and dense registries
     ///
-    /// This is a low-level function. Prefer using [`Self::register_definition`].
+    /// This is a low-level function. Prefer using
+    /// [`Self::register_definition`].
     pub fn register_function(
         &mut self,
         name: &str,
@@ -384,8 +385,8 @@ where
 
     /// Hook for the JIT compiler on how to codegen this built-in function.
     ///
-    /// You could opt to codegen it in-line, but do note that defining the other methods is still
-    /// required for non-JIT execution modes.
+    /// You could opt to codegen it in-line, but do note that defining the other
+    /// methods is still required for non-JIT execution modes.
     fn codegen(jit: &mut JitCompiler<C>) {
         jit.emit_external_call(Self::vm);
     }
@@ -412,7 +413,8 @@ impl<C: ContextObject> std::fmt::Debug for BuiltinProgram<C> {
     }
 }
 
-/// Generates an adapter for a BuiltinFunction between the Rust and the VM interface
+/// Generates an adapter for a BuiltinFunction between the Rust and the VM
+/// interface
 #[macro_export]
 macro_rules! declare_builtin_function {
     (

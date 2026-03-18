@@ -50,7 +50,8 @@ impl<const ALIGN: usize> AlignedMemory<ALIGN> {
         }
     }
 
-    /// Returns a new empty AlignedMemory with zero initialized preallocated memory
+    /// Returns a new empty AlignedMemory with zero initialized preallocated
+    /// memory
     pub fn with_capacity_zeroed(max_len: usize) -> Self {
         let mem = AlignedVec::new(max_len, true);
         Self {
@@ -59,7 +60,8 @@ impl<const ALIGN: usize> AlignedMemory<ALIGN> {
         }
     }
 
-    /// Returns a new filled AlignedMemory with zero initialized preallocated memory
+    /// Returns a new filled AlignedMemory with zero initialized preallocated
+    /// memory
     pub fn zero_filled(max_len: usize) -> Self {
         let mut mem = AlignedVec::new(max_len, true);
         // SAFETY: Bytes were zeroed
@@ -72,7 +74,8 @@ impl<const ALIGN: usize> AlignedMemory<ALIGN> {
         }
     }
 
-    /// Calculate memory size (allocated memory block and the size of [`AlignedMemory`] itself).
+    /// Calculate memory size (allocated memory block and the size of
+    /// [`AlignedMemory`] itself).
     pub fn mem_size(&self) -> usize {
         self.mem.capacity().saturating_add(mem::size_of::<Self>())
     }
@@ -102,7 +105,8 @@ impl<const ALIGN: usize> AlignedMemory<ALIGN> {
         self.mem.as_slice_mut()
     }
 
-    /// Grows memory with `value` repeated `num` times starting at the `write_index`
+    /// Grows memory with `value` repeated `num` times starting at the
+    /// `write_index`
     pub fn fill_write(&mut self, num: usize, value: u8) -> std::io::Result<()> {
         let (ptr, new_len) = self.mem.write_ptr_for(num).ok_or_else(|| {
             std::io::Error::new(
@@ -112,7 +116,8 @@ impl<const ALIGN: usize> AlignedMemory<ALIGN> {
         })?;
 
         if self.zero_up_to_max_len && value == 0 {
-            // No action needed because up to `max_len` is zeroed and no shrinking is allowed
+            // No action needed because up to `max_len` is zeroed and no
+            // shrinking is allowed
         } else {
             unsafe {
                 core::ptr::write_bytes(ptr, value, num);
@@ -194,8 +199,9 @@ pub fn is_memory_aligned(ptr: usize, align: usize) -> bool {
         .unwrap_or(false)
 }
 
-/// Provides backing storage for [`AlignedMemory`]. Allocates a block of bytes with the
-/// requested alignment, and can be increased in length up to the requested capacity.
+/// Provides backing storage for [`AlignedMemory`]. Allocates a block of bytes
+/// with the requested alignment, and can be increased in length up to the
+/// requested capacity.
 struct AlignedVec<const ALIGN: usize> {
     ptr: NonNull<u8>,
     length: usize,
@@ -235,7 +241,8 @@ impl<const ALIGN: usize> AlignedVec<ALIGN> {
     /// Ensure that the Vec is only dropped with the correct layout
     ///
     /// # Panics
-    /// Panics if the requested size is incompatible with the requested alignment or if allocation fails.
+    /// Panics if the requested size is incompatible with the requested
+    /// alignment or if allocation fails.
     fn new(max_len: usize, zeroed: bool) -> Self {
         assert!(ALIGN != 0, "Alignment must not be zero");
         if max_len == 0 {
@@ -284,7 +291,8 @@ impl<const ALIGN: usize> AlignedVec<ALIGN> {
 
     /// Returns a pointer to the end of the current initialized length, i.e.
     /// `mem.as_mut_ptr().mem(self.len())`.
-    /// Users must ensure that any writes to this pointer are in bounds of `capacity`
+    /// Users must ensure that any writes to this pointer are in bounds of
+    /// `capacity`
     fn write_ptr(&mut self) -> *mut u8 {
         unsafe { self.as_mut_ptr().add(self.len()) }
     }
@@ -312,9 +320,9 @@ impl<const ALIGN: usize> AlignedVec<ALIGN> {
         self.len() == 0
     }
 
-    /// Set the length of the `AlignedVec`. The new length must be less than or equal to
-    /// the capacity, and the memory must be initialized up to that length.
-    /// The new length must not be less than the previous length.
+    /// Set the length of the `AlignedVec`. The new length must be less than or
+    /// equal to the capacity, and the memory must be initialized up to that
+    /// length. The new length must not be less than the previous length.
     unsafe fn set_len(&mut self, new_len: usize) {
         debug_assert!(
             new_len <= self.capacity,
@@ -325,10 +333,12 @@ impl<const ALIGN: usize> AlignedVec<ALIGN> {
     }
 }
 
-/// `AlignedVec` is [`Send`] as `u8` is `Send` and the data behind the pointer is uniquely owned.
+/// `AlignedVec` is [`Send`] as `u8` is `Send` and the data behind the pointer
+/// is uniquely owned.
 unsafe impl<const N: usize> Send for AlignedVec<N> {}
 
-/// `AlignedVec` is [`Sync`] as `u8` is `Send` and the data behind the pointer is uniquely owned.
+/// `AlignedVec` is [`Sync`] as `u8` is `Send` and the data behind the pointer
+/// is uniquely owned.
 unsafe impl<const N: usize> Sync for AlignedVec<N> {}
 
 #[allow(clippy::arithmetic_side_effects)]

@@ -160,7 +160,8 @@ fn format_parse_error(parse_error: &Errors<char, &str, SourcePosition>) -> Strin
 
 /// Parse a string into a list of instructions.
 ///
-/// The instructions are not validated and may have invalid names and operand types.
+/// The instructions are not validated and may have invalid names and operand
+/// types.
 pub fn parse(input: &str) -> Result<Vec<Statement>, String> {
     match spaces()
         .with(many(
@@ -179,10 +180,12 @@ pub fn parse(input: &str) -> Result<Vec<Statement>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ident, instruction, integer, mnemonic, operand, parse, register, Operand, Statement,
+    use {
+        super::{
+            ident, instruction, integer, mnemonic, operand, parse, register, Operand, Statement,
+        },
+        combine::Parser,
     };
-    use combine::Parser;
 
     // Unit tests for the different kinds of parsers.
 
@@ -393,8 +396,8 @@ mod tests {
     #[test]
     fn test_tcp_sack() {
         // Sample program from ubpf.
-        // We could technically indent the instructions since the parser support white spaces at
-        // the beginning, but there is another test for that.
+        // We could technically indent the instructions since the parser support white
+        // spaces at the beginning, but there is another test for that.
         let src = "\
 ldxb r2, [r1+12]
 ldxb r3, [r1+13]
@@ -671,7 +674,9 @@ exit
         assert_eq!(
             parse("exit\n^"),
             Err(
-                "Parse error at line 2 column 1: unexpected '^', expected letter or digit, expected '_', expected '.', expected whitespaces, expected end of input".to_string()
+                "Parse error at line 2 column 1: unexpected '^', expected letter or digit, \
+                 expected '_', expected '.', expected whitespaces, expected end of input"
+                    .to_string()
             )
         );
     }

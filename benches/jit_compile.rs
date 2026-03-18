@@ -9,13 +9,15 @@
 extern crate solana_sbpf;
 extern crate test;
 
-use solana_sbpf::{
-    elf::Executable, metrics::VerifyMetrics, program::BuiltinProgram,
-    verifier::RequisiteVerifier,
+use {
+    solana_sbpf::{
+        elf::Executable, metrics::VerifyMetrics, program::BuiltinProgram,
+        verifier::RequisiteVerifier,
+    },
+    std::{fs::File, io::Read, sync::Arc},
+    test::Bencher,
+    test_utils::{create_vm, TestContextObject},
 };
-use std::{fs::File, io::Read, sync::Arc};
-use test::Bencher;
-use test_utils::{create_vm, TestContextObject};
 
 #[bench]
 fn bench_init_vm(bencher: &mut Bencher) {
@@ -25,7 +27,9 @@ fn bench_init_vm(bencher: &mut Bencher) {
     let executable =
         Executable::<TestContextObject>::from_elf(&elf, Arc::new(BuiltinProgram::new_mock()))
             .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
     bencher.iter(|| {
         let mut context_object = TestContextObject::default();
         create_vm!(
@@ -49,6 +53,8 @@ fn bench_jit_compile(bencher: &mut Bencher) {
     let executable =
         Executable::<TestContextObject>::from_elf(&elf, Arc::new(BuiltinProgram::new_mock()))
             .unwrap();
-    executable.verify::<RequisiteVerifier>(&mut VerifyMetrics::default()).unwrap();
+    executable
+        .verify::<RequisiteVerifier>(&mut VerifyMetrics::default())
+        .unwrap();
     bencher.iter(|| executable.jit_compile().unwrap());
 }

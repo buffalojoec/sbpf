@@ -5,22 +5,24 @@
 // the MIT license <http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-//! This module contains all the definitions related to eBPF, and some functions permitting to
-//! manipulate eBPF instructions.
+//! This module contains all the definitions related to eBPF, and some functions
+//! permitting to manipulate eBPF instructions.
 //!
-//! The number of bytes in an instruction, the maximum number of instructions in a program, and
-//! also all operation codes are defined here as constants.
+//! The number of bytes in an instruction, the maximum number of instructions in
+//! a program, and also all operation codes are defined here as constants.
 //!
-//! The structure for an instruction used by this crate, as well as the function to extract it from
-//! a program, is also defined in the module.
+//! The structure for an instruction used by this crate, as well as the function
+//! to extract it from a program, is also defined in the module.
 //!
 //! To learn more about these instructions, see the Linux kernel documentation:
 //! <https://www.kernel.org/doc/Documentation/networking/filter.txt>, or for a shorter version of
 //! the list of the operation codes: <https://github.com/iovisor/bpf-docs/blob/master/eBPF.md>
 
-use byteorder::{ByteOrder, LittleEndian};
-use hash32::{Hasher, Murmur3Hasher};
-use std::{fmt, hash::Hash};
+use {
+    byteorder::{ByteOrder, LittleEndian},
+    hash32::{Hasher, Murmur3Hasher},
+    std::{fmt, hash::Hash},
+};
 
 /// Maximum number of instructions in an eBPF program.
 pub const PROG_MAX_INSNS: usize = 65_536;
@@ -34,14 +36,16 @@ pub const FIRST_SCRATCH_REG: usize = 6;
 pub const SCRATCH_REGS: usize = 4;
 /// Alignment of the memory regions in host address space in bytes
 pub const HOST_ALIGN: usize = 16;
-/// Upper half of a pointer is the region index, lower half the virtual address inside that region.
+/// Upper half of a pointer is the region index, lower half the virtual address
+/// inside that region.
 pub const VIRTUAL_ADDRESS_BITS: usize = 32;
 
 /// Size (and alignment) of a memory region
 pub const MM_REGION_SIZE: u64 = 1 << VIRTUAL_ADDRESS_BITS;
 /// Virtual address of the readonly data region (in SBPFv3)
 pub const MM_RODATA_START: u64 = 0;
-/// Virtual address of the bytecode region (also contains the rodata until SBPFv3)
+/// Virtual address of the bytecode region (also contains the rodata until
+/// SBPFv3)
 pub const MM_BYTECODE_START: u64 = MM_REGION_SIZE;
 /// Virtual address of the stack region
 pub const MM_STACK_START: u64 = MM_REGION_SIZE * 2;
@@ -157,9 +161,10 @@ pub const BPF_END: u8 = 0xd0;
 pub const BPF_HOR: u8 = 0xf0;
 
 // Operation codes -- BPF_PQR class:
-//    7         6               5                               4       3          2-0
-// 0  Unsigned  Multiplication  Product Lower Half / Quotient   32 Bit  Immediate  PQR
-// 1  Signed    Division        Product Upper Half / Remainder  64 Bit  Register   PQR
+//    7         6               5                               4       3
+// 2-0 0  Unsigned  Multiplication  Product Lower Half / Quotient   32 Bit
+// Immediate  PQR 1  Signed    Division        Product Upper Half / Remainder
+// 64 Bit  Register   PQR
 /// BPF PQR operation code: unsigned high multiplication.
 pub const BPF_UHMUL: u8 = 0x20;
 /// BPF PQR operation code: unsigned division quotient.
@@ -206,8 +211,9 @@ pub const BPF_JSLT: u8 = 0xc0;
 pub const BPF_JSLE: u8 = 0xd0;
 
 // Op codes
-// (Following operation names are not “official”, but may be proper to sbpf; Linux kernel only
-// combines above flags and does not attribute a name per operation.)
+// (Following operation names are not “official”, but may be proper to sbpf;
+// Linux kernel only combines above flags and does not attribute a name per
+// operation.)
 
 /// BPF opcode: `lddw dst, imm` /// `dst = imm`. [DEPRECATED]
 pub const LD_DW_IMM: u8 = BPF_LD | BPF_IMM | BPF_DW;
@@ -519,7 +525,8 @@ pub const JSLT64_REG: u8 = BPF_JMP64 | BPF_X | BPF_JSLT;
 pub const JSLE64_IMM: u8 = BPF_JMP64 | BPF_K | BPF_JSLE;
 /// BPF opcode: `jsle64 dst, src, +off` /// `PC += off if dst <= src (signed)`.
 pub const JSLE64_REG: u8 = BPF_JMP64 | BPF_X | BPF_JSLE;
-/// BPF opcode: `call imm` /// syscall or function call to syscall with key `imm`.
+/// BPF opcode: `call imm` /// syscall or function call to syscall with key
+/// `imm`.
 pub const CALL_IMM: u8 = BPF_JMP64 | BPF_CALL;
 /// BPF opcode: `call reg`
 pub const CALL_REG: u8 = BPF_JMP64 | BPF_X | BPF_CALL;
@@ -529,7 +536,8 @@ pub const EXIT: u8 = BPF_JMP64 | BPF_EXIT;
 // Used in JIT
 /// Mask to extract the operation class from an operation code.
 pub const BPF_CLS_MASK: u8 = 0x07;
-/// Mask to extract the arithmetic operation code from an instruction operation code.
+/// Mask to extract the arithmetic operation code from an instruction operation
+/// code.
 pub const BPF_ALU_OP_MASK: u8 = 0xf0;
 
 /// An eBPF instruction.
@@ -557,7 +565,8 @@ impl fmt::Debug for Insn {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Insn {{ ptr: 0x{:08x?}, opc: 0x{:02x?}, dst: {}, src: {}, off: 0x{:04x?}, imm: 0x{:08x?} }}",
+            "Insn {{ ptr: 0x{:08x?}, opc: 0x{:02x?}, dst: {}, src: {}, off: 0x{:04x?}, imm: \
+             0x{:08x?} }}",
             self.ptr, self.opc, self.dst, self.src, self.off, self.imm
         )
     }
@@ -626,13 +635,13 @@ impl Insn {
 pub fn is_pc_in_program(prog: &[u8], pc: usize) -> bool {
     pc.saturating_add(1).saturating_mul(INSN_SIZE) <= prog.len()
 }
-/// Get the instruction at `idx` of an eBPF program. `idx` is the index (number) of the
-/// instruction (not a byte offset). The first instruction has index 0.
+/// Get the instruction at `idx` of an eBPF program. `idx` is the index (number)
+/// of the instruction (not a byte offset). The first instruction has index 0.
 ///
 /// # Panics
 ///
-/// Panics if it is not possible to get the instruction (if idx is too high, or last instruction is
-/// incomplete).
+/// Panics if it is not possible to get the instruction (if idx is too high, or
+/// last instruction is incomplete).
 ///
 /// # Examples
 ///
@@ -647,7 +656,8 @@ pub fn is_pc_in_program(prog: &[u8], pc: usize) -> bool {
 /// assert_eq!(insn.opc, 0x95);
 /// ```
 ///
-/// The example below will panic, since the last instruction is not complete and cannot be loaded.
+/// The example below will panic, since the last instruction is not complete and
+/// cannot be loaded.
 ///
 /// ```rust,should_panic
 /// use solana_sbpf::ebpf;
@@ -659,9 +669,10 @@ pub fn is_pc_in_program(prog: &[u8], pc: usize) -> bool {
 /// let insn = ebpf::get_insn(prog, 1);
 /// ```
 pub fn get_insn(prog: &[u8], pc: usize) -> Insn {
-    // This guard should not be needed in most cases, since the verifier already checks the program
-    // size, and indexes should be fine in the interpreter/JIT. But this function is publicly
-    // available and user can call it with any `pc`, so we have to check anyway.
+    // This guard should not be needed in most cases, since the verifier already
+    // checks the program size, and indexes should be fine in the
+    // interpreter/JIT. But this function is publicly available and user can
+    // call it with any `pc`, so we have to check anyway.
     debug_assert!(
         is_pc_in_program(prog, pc),
         "cannot reach instruction at index {:?} in program containing {:?} bytes",
@@ -691,9 +702,9 @@ pub fn augment_lddw_unchecked(prog: &[u8], insn: &mut Insn) {
 
 /// Hash a symbol name
 ///
-/// This function is used by both the relocator and the VM to translate symbol names
-/// into a 32 bit id used to identify a syscall function.  The 32 bit id is used in the
-/// eBPF `call` instruction's imm field.
+/// This function is used by both the relocator and the VM to translate symbol
+/// names into a 32 bit id used to identify a syscall function.  The 32 bit id
+/// is used in the eBPF `call` instruction's imm field.
 pub fn hash_symbol_name(name: &[u8]) -> u32 {
     let mut hasher = Murmur3Hasher::default();
     Hash::hash_slice(name, &mut hasher);

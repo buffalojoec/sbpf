@@ -12,8 +12,10 @@
 
 //! Verifies that the bytecode is valid for the given config.
 
-use crate::{ebpf, metrics::VerifyMetrics, program::SBPFVersion, vm::Config};
-use thiserror::Error;
+use {
+    crate::{ebpf, metrics::VerifyMetrics, program::SBPFVersion, vm::Config},
+    thiserror::Error,
+};
 
 /// Error definitions
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -79,7 +81,8 @@ pub enum VerifierError {
 
 /// eBPF Verifier
 pub trait Verifier {
-    /// eBPF verification function that returns an error if the program does not meet its requirements.
+    /// eBPF verification function that returns an error if the program does not
+    /// meet its requirements.
     ///
     /// Some examples of things the verifier may reject the program for:
     ///

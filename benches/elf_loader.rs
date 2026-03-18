@@ -10,14 +10,16 @@ extern crate solana_sbpf;
 extern crate test;
 extern crate test_utils;
 
-use solana_sbpf::{
-    elf::Executable,
-    program::{BuiltinFunctionDefinition, BuiltinProgram},
-    vm::Config,
+use {
+    solana_sbpf::{
+        elf::Executable,
+        program::{BuiltinFunctionDefinition, BuiltinProgram},
+        vm::Config,
+    },
+    std::{fs::File, io::Read, sync::Arc},
+    test::Bencher,
+    test_utils::{syscalls, TestContextObject},
 };
-use std::{fs::File, io::Read, sync::Arc};
-use test::Bencher;
-use test_utils::{syscalls, TestContextObject};
 
 fn loader() -> Arc<BuiltinProgram<TestContextObject>> {
     let mut loader = BuiltinProgram::new_loader(Config::default());

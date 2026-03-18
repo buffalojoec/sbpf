@@ -5,16 +5,19 @@
 // the MIT license <http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-//! Functions in this module are used to handle eBPF programs with a higher level representation,
-//! for example to disassemble the code into a human-readable format.
+//! Functions in this module are used to handle eBPF programs with a higher
+//! level representation, for example to disassemble the code into a
+//! human-readable format.
 
-use crate::{
-    ebpf,
-    program::{BuiltinProgram, FunctionRegistry, SBPFVersion},
-    static_analysis::CfgNode,
-    vm::ContextObject,
+use {
+    crate::{
+        ebpf,
+        program::{BuiltinProgram, FunctionRegistry, SBPFVersion},
+        static_analysis::CfgNode,
+        vm::ContextObject,
+    },
+    std::collections::BTreeMap,
 };
-use std::collections::BTreeMap;
 
 fn resolve_label(cfg_nodes: &BTreeMap<usize, CfgNode>, pc: usize) -> &str {
     cfg_nodes

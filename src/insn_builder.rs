@@ -83,8 +83,8 @@ pub trait IntoBytes {
 impl<I: Instruction> IntoBytes for &I {
     type Bytes = Vec<u8>;
 
-    /// transform immutable reference of `Instruction` into `Vec<u8>` with size of 8
-    /// [ 1 byte ,      1 byte      , 2 bytes,  4 bytes  ]
+    /// transform immutable reference of `Instruction` into `Vec<u8>` with size
+    /// of 8 [ 1 byte ,      1 byte      , 2 bytes,  4 bytes  ]
     /// [ OP_CODE, SRC_REG | DST_REG, OFFSET , IMMEDIATE ]
     fn into_bytes(self) -> Self::Bytes {
         vec![
@@ -367,7 +367,8 @@ impl Instruction for Move<'_> {
     }
 }
 
-/// struct to represent PQR instructions (Product/Quotient/Remainder for SBPF v2)
+/// struct to represent PQR instructions (Product/Quotient/Remainder for SBPF
+/// v2)
 pub struct Pqr<'i> {
     bpf_code: &'i mut BpfCode,
     src_bit: Source,
@@ -618,7 +619,8 @@ pub enum MemSize {
 }
 
 impl MemSize {
-    /// Convert old memory size encoding to new V2 encoding for move_memory_instruction_classes
+    /// Convert old memory size encoding to new V2 encoding for
+    /// move_memory_instruction_classes
     fn to_v2_encoding(self) -> u8 {
         match self {
             MemSize::Byte => BPF_1B,

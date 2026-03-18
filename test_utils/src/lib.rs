@@ -47,7 +47,8 @@ impl TestContextObject {
 
 /// Compares an interpreter trace and a JIT trace.
 ///
-/// The log of the JIT can be longer because it only validates the instruction meter at branches.
+/// The log of the JIT can be longer because it only validates the instruction
+/// meter at branches.
 pub fn compare_register_trace(
     interpreter: &[RegisterTraceEntry],
     mut jit: &[RegisterTraceEntry],

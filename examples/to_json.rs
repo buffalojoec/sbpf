@@ -11,22 +11,26 @@ extern crate elf;
 use std::path::PathBuf;
 
 extern crate solana_sbpf;
-use solana_sbpf::{
-    elf::Executable,
-    program::{BuiltinProgram, FunctionRegistry, SBPFVersion},
-    static_analysis::Analysis,
+use {
+    solana_sbpf::{
+        elf::Executable,
+        program::{BuiltinProgram, FunctionRegistry, SBPFVersion},
+        static_analysis::Analysis,
+    },
+    std::sync::Arc,
+    test_utils::TestContextObject,
 };
-use std::sync::Arc;
-use test_utils::TestContextObject;
 // Turn a program into a JSON string.
 //
 // Relies on `json` crate.
 //
-// You may copy this function and adapt it according to your needs. For instance, you may want to:
+// You may copy this function and adapt it according to your needs. For
+// instance, you may want to:
 //
 // * Remove the "desc" (description) attributes from the output.
-// * Print integers as integers, and not as strings containing their hexadecimal representation
-//   (just replace the relevant `format!()` calls by the commented values.
+// * Print integers as integers, and not as strings containing their hexadecimal
+//   representation (just replace the relevant `format!()` calls by the
+//   commented values.
 fn to_json(program: &[u8]) -> String {
     let executable = Executable::<TestContextObject>::from_text_bytes(
         program,
@@ -67,7 +71,8 @@ fn to_json(program: &[u8]) -> String {
     )
 }
 
-// Load a program from an object file, and prints it to standard output as a JSON string.
+// Load a program from an object file, and prints it to standard output as a
+// JSON string.
 fn main() {
     // Let's reuse this file from `load_elf` example.
     let filename = "examples/load_elf__block_a_port.o";
