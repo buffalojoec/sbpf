@@ -337,6 +337,11 @@ impl<C: ContextObject> Executable<C> {
         &self.loader
     }
 
+    /// Replace the loader built-in program
+    pub fn set_loader(&mut self, loader: Arc<BuiltinProgram<C>>) {
+        self.loader = loader;
+    }
+
     /// Get the JIT compiled program
     ///
     /// This function will not block the calling thread even if there is a
