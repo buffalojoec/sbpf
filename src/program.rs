@@ -105,7 +105,7 @@ impl SBPFVersion {
 }
 
 /// Holds the function symbols of an Executable
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FunctionRegistry<T> {
     pub(crate) map: BTreeMap<u32, (Vec<u8>, T)>,
 }
