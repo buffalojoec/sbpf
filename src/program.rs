@@ -268,6 +268,18 @@ impl<C: ContextObject> BuiltinProgram<C> {
         }
     }
 
+    /// Constructs a loader built-in program with a pre-populated function
+    /// registry.
+    pub fn new_loader_with_registry(
+        config: Config,
+        registry: FunctionRegistry<(BuiltinFunction<C>, BuiltinCodegen<C>)>,
+    ) -> Self {
+        Self {
+            config: Some(Box::new(config)),
+            sparse_registry: registry,
+        }
+    }
+
     /// Constructs a built-in program
     pub fn new_builtin() -> Self {
         Self {
