@@ -78,6 +78,8 @@ pub struct Config {
     pub enable_symbol_and_section_labels: bool,
     /// Reject ELF files containing issues that the verifier did not catch before (up to v0.2.21)
     pub reject_broken_elfs: bool,
+    /// Additional ELF loader checks active when bytecode verification is disabled.
+    pub stricter_loader_checks: bool,
     #[cfg(feature = "jit")]
     /// Ratio of native host instructions per random no-op in JIT (0 = OFF)
     pub noop_instruction_rate: u32,
@@ -113,6 +115,7 @@ impl Default for Config {
             enable_register_tracing: false,
             enable_symbol_and_section_labels: false,
             reject_broken_elfs: false,
+            stricter_loader_checks: false,
             #[cfg(feature = "jit")]
             noop_instruction_rate: 256,
             #[cfg(feature = "jit")]
