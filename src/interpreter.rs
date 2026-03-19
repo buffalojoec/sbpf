@@ -268,7 +268,43 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                 let vm_addr = (self.reg[src] as i64).wrapping_add(insn.off as i64) as u64;
                 self.reg[dst] = translate_memory_access!(self, load, vm_addr, u8);
             },
-            ebpf::DIV32_IMM  if !self.executable.get_sbpf_version().enable_pqr() => self.reg[dst] = (self.reg[dst] as u32             / insn.imm as u32)      as u64,
+            // [UH] Immediate division by zero.
+            //
+            // Background: Each SBPF instruction has an `imm` field (32-bit
+            // immediate baked into the instruction encoding) and a `src`
+            // field (register operand). For `DIV32_IMM`, the divisor comes
+            // from `insn.imm`, not a register.
+            //
+            // Verifier equivalent: `check_imm_nonzero` in verifier.rs:104
+            // scans every div/mod instruction during the verification pass
+            // and rejects the whole program if any immediate divisor is 0.
+            // This happens at deploy time — the program never reaches
+            // execution.
+            //
+            // Without the verifier: The program loads and starts executing.
+            // When the interpreter reaches this instruction, Rust's `/`
+            // operator panics on integer division by zero. That's a process
+            // abort — not a clean VM error.
+            //
+            // Fix: We use the `throw_error!(DivideByZero; ...)` macro,
+            // which expands roughly to:
+            //   if insn.imm as u32 == 0 {
+            //       self.vm.program_result = ProgramResult::Err(EbpfError::DivideByZero);
+            //       return false;  // exits the interpreter step loop
+            //   }
+            // This returns a clean EbpfError to the caller instead of
+            // panicking. The register-operand variant (DIV32_REG, below)
+            // already had this check — we're adding it for the immediate
+            // variant to match.
+            //
+            // Why unconditional: The old behavior (panic) is
+            // non-deterministic from consensus perspective. No valid
+            // on-chain program can have imm=0 (the verifier rejected it),
+            // so this check never fires for existing programs.
+            ebpf::DIV32_IMM  if !self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, u32);
+                self.reg[dst] = (self.reg[dst] as u32 / insn.imm as u32) as u64;
+            },
             ebpf::DIV32_REG  if !self.executable.get_sbpf_version().enable_pqr() => {
                 throw_error!(DivideByZero; self, self.reg[src], u32);
                                 self.reg[dst] = (self.reg[dst] as u32             / self.reg[src] as u32) as u64;
@@ -290,7 +326,11 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                 let vm_addr = (self.reg[src] as i64).wrapping_add(insn.off as i64) as u64;
                 self.reg[dst] = translate_memory_access!(self, load, vm_addr, u32);
             },
-            ebpf::MOD32_IMM  if !self.executable.get_sbpf_version().enable_pqr() => self.reg[dst] = (self.reg[dst] as u32             % insn.imm as u32)      as u64,
+            // [UH] Same as DIV32_IMM above — mod by zero also panics in Rust.
+            ebpf::MOD32_IMM  if !self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, u32);
+                self.reg[dst] = (self.reg[dst] as u32 % insn.imm as u32) as u64;
+            },
             ebpf::MOD32_REG  if !self.executable.get_sbpf_version().enable_pqr() => {
                 throw_error!(DivideByZero; self, self.reg[src], u32);
                                 self.reg[dst] = (self.reg[dst] as u32             % self.reg[src] as u32) as u64;
@@ -349,7 +389,11 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                 let vm_addr = (self.reg[dst] as i64).wrapping_add(insn.off as i64) as u64;
                 translate_memory_access!(self, store, self.reg[src], vm_addr, u8);
             },
-            ebpf::DIV64_IMM  if !self.executable.get_sbpf_version().enable_pqr() => self.reg[dst] /= insn.imm as u64,
+            // [UH] Same pattern for 64-bit division.
+            ebpf::DIV64_IMM  if !self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, u64);
+                self.reg[dst] /= insn.imm as u64;
+            },
             ebpf::ST_2B_IMM  if self.executable.get_sbpf_version().move_memory_instruction_classes() => {
                 let vm_addr = (self.reg[dst] as i64).wrapping_add(insn.off as i64) as u64;
                 translate_memory_access!(self, store, insn.imm, vm_addr, u16);
@@ -379,7 +423,11 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
                 let vm_addr = (self.reg[dst] as i64).wrapping_add(insn.off as i64) as u64;
                 translate_memory_access!(self, store, self.reg[src], vm_addr, u32);
             },
-            ebpf::MOD64_IMM  if !self.executable.get_sbpf_version().enable_pqr() => self.reg[dst] %= insn.imm as u64,
+            // [UH] Same pattern for 64-bit mod.
+            ebpf::MOD64_IMM  if !self.executable.get_sbpf_version().enable_pqr() => {
+                throw_error!(DivideByZero; self, insn.imm, u64);
+                self.reg[dst] %= insn.imm as u64;
+            },
             ebpf::ST_8B_IMM  if self.executable.get_sbpf_version().move_memory_instruction_classes() => {
                 let vm_addr = (self.reg[dst] as i64).wrapping_add(insn.off as i64) as u64;
                 translate_memory_access!(self, store, insn.imm, vm_addr, u64);

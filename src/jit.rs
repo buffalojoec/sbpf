@@ -1319,6 +1319,44 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
                 self.emit_ins(X86Instruction::load_immediate(REGISTER_SCRATCH, self.pc as i64)); // Save pc
                 self.emit_ins(X86Instruction::test(size, src, src, None)); // src == 0
                 self.emit_ins(X86Instruction::conditional_jump_immediate(0x84, self.relative_to_anchor(ANCHOR_DIV_BY_ZERO, 6)));
+            } else if imm == Some(0) {
+                // [UH] Immediate division by zero.
+                //
+                // Background: The JIT compiles SBPF instructions into x86
+                // machine code. For division, it emits x86 DIV/IDIV
+                // instructions. The divisor is loaded into REGISTER_SCRATCH
+                // (a host register used for temporary values) and the x86
+                // DIV operates on it.
+                //
+                // The `imm.is_none()` branch above handles the register-
+                // operand case: it emits a runtime `test src, src` + a
+                // conditional jump to ANCHOR_DIV_BY_ZERO if the register
+                // value is 0. The anchor is a pre-generated error
+                // trampoline that sets the VM's program_result to
+                // EbpfError::DivideByZero and exits.
+                //
+                // For immediates, `imm == Some(value)` and the old code
+                // had no check — it trusted the verifier to reject imm=0.
+                // Without the verifier, the immediate 0 gets loaded into
+                // REGISTER_SCRATCH and x86 DIV divides by it, raising a
+                // hardware #DE (divide error) exception — a SIGFPE that
+                // crashes the process.
+                //
+                // Fix: When the immediate is 0, we emit an unconditional
+                // jump to the ANCHOR_DIV_BY_ZERO error trampoline and
+                // return early (don't emit the actual division code).
+                // The compiled binary contains a jump-to-error at this
+                // instruction's site. If execution reaches it, the VM
+                // returns EbpfError::DivideByZero cleanly.
+                //
+                // Compare to the interpreter fix (interpreter.rs): The
+                // interpreter checks at runtime each time the instruction
+                // executes. The JIT check is at compile time — the error
+                // path is baked into the binary once, then runs at native
+                // speed. Same error, different mechanism.
+                self.emit_ins(X86Instruction::load_immediate(REGISTER_SCRATCH, self.pc as i64));
+                self.emit_ins(X86Instruction::jump_immediate(self.relative_to_anchor(ANCHOR_DIV_BY_ZERO, 5)));
+                return;
             }
 
             // Signed division overflows with MIN / -1.
