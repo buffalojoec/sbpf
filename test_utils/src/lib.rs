@@ -19,6 +19,8 @@ use solana_sbpf::{
     vm::ContextObject,
 };
 
+pub mod corpus;
+pub mod elf_builder;
 pub mod syscalls;
 
 /// Simple instruction meter for testing
@@ -225,7 +227,7 @@ pub fn create_memory_mapping<'a, C: ContextObject>(
         MemoryRegion::new_writable(heap.as_slice_mut(), ebpf::MM_HEAP_START),
     ]
     .into_iter()
-    .chain(additional_regions.into_iter())
+    .chain(additional_regions)
     .collect();
 
     Ok(
