@@ -443,12 +443,50 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
                 self.emit_ins(X86Instruction::load_immediate(REGISTER_SCRATCH, 0));
             }
 
+            // [UH] Register bounds check.
+            //
+            // REGISTER_MAP (jit.rs:237) maps SBPF register numbers (0–10)
+            // to x86 physical registers. It has exactly 11 entries. The
+            // `dst` and `src` fields are 4-bit values (0–15) from the
+            // instruction encoding. Without the verifier, a crafted
+            // instruction with dst=11 or src=11 panics with array OOB.
+            //
+            // Fix: Bounds-check before indexing. If either register index
+            // exceeds the REGISTER_MAP length, the JIT compiler returns an
+            // error instead of panicking. This is a compile-time check (the
+            // program is rejected during JIT compilation, not at execution).
+            if insn.dst as usize >= REGISTER_MAP.len() || insn.src as usize >= REGISTER_MAP.len() {
+                return Err(EbpfError::InvalidInstruction);
+            }
             let dst = REGISTER_MAP[insn.dst as usize];
             let src = REGISTER_MAP[insn.src as usize];
             let target_pc = (self.pc as isize + insn.off as isize + 1) as usize;
 
             match insn.opc {
+                // [UH] LDDW is a two-slot instruction. The JIT reads
+                // both slots at compile time via `augment_lddw_unchecked`
+                // to get the full 64-bit immediate. If LDDW is the last
+                // instruction in the program, the second slot doesn't
+                // exist and `augment_lddw_unchecked` panics with an OOB
+                // slice access.
+                //
+                // The verifier (check_load_dw in verifier.rs:130) rejects
+                // this at deploy time. Without the verifier, the JIT
+                // compiler panics.
+                //
+                // Fix: We check that the second slot exists before reading
+                // it. If it doesn't, we return EbpfError::InvalidInstruction
+                // from the JIT compiler. Note this is a compile-time error
+                // (the JIT refuses to compile the program), not an
+                // execution-time error — but it prevents the panic and the
+                // program cannot be executed. This is acceptable because a
+                // truncated LDDW is structurally broken, not just a
+                // semantic violation.
                 ebpf::LD_DW_IMM if !self.executable.get_sbpf_version().disable_lddw() => {
+                    // Check that the second slot of the LDDW pair exists.
+                    if (self.pc + 1) * ebpf::INSN_SIZE >= self.program.len() {
+                        return Err(EbpfError::InvalidInstruction);
+                    }
                     self.emit_validate_and_profile_instruction_count(self.pc + 2);
                     self.pc += 1;
                     self.result.pc_section[self.pc] = unsafe { self.anchors[ANCHOR_CALL_UNSUPPORTED_INSTRUCTION].offset_from(self.result.text_section.as_ptr()) as u32 };
@@ -835,11 +873,19 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
                     }
                 },
                 ebpf::CALL_REG  => {
+                    // [UH] For V0/V1, callx encodes the register index
+                    // in insn.imm. This indexes REGISTER_MAP which has
+                    // 11 entries. If imm is out of range, it panics.
+                    // V2 uses src, V3+ uses dst (both already bounds-
+                    // checked above).
                     let target_pc = if self.executable.get_sbpf_version().callx_uses_src_reg() {
                         src
                     } else if self.executable.get_sbpf_version().callx_uses_dst_reg() {
                         dst
                     } else {
+                        if insn.imm < 0 || insn.imm as usize >= REGISTER_MAP.len() {
+                            return Err(EbpfError::InvalidInstruction);
+                        }
                         REGISTER_MAP[insn.imm as usize]
                     };
                     self.emit_internal_call(Value::Register(target_pc));

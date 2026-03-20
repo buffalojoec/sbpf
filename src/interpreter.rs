@@ -187,12 +187,59 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
         let dst = insn.dst as usize;
         let src = insn.src as usize;
 
+        // [UH] Register bounds check.
+        //
+        // Background: Each SBPF instruction encodes `dst` and `src` as
+        // 4-bit fields in a single byte: byte[1] = (src << 4) | dst.
+        // This means both can be 0–15. The interpreter's register file
+        // `self.reg` has 12 entries: r0–r10 are general-purpose, r11 is
+        // the PC (internal, not addressable by programs). Indices 12–15
+        // are out of bounds and cause a Rust panic.
+        //
+        // The verifier (check_registers in verifier.rs:166) rejects
+        // programs with src > 10 or dst > 10 (with exceptions for stores
+        // to r10). Without the verifier, a crafted instruction with
+        // src=12 or dst=12 panics the interpreter.
+        //
+        // Fix: We check that both register indices are within the
+        // physical register file (< 12). If not, we return
+        // EbpfError::InvalidInstruction. This only prevents panics —
+        // the semantic check (should src/dst be > 10 at all?) is a
+        // separate [CH] change that requires the feature gate.
+        //
+        // Why < 12 and not <= 10: Indices 0–11 are valid array accesses
+        // (no panic). Index 11 (the PC register) is semantically wrong
+        // but deterministic — changing that behavior requires a feature
+        // gate. We only prevent the actual OOB panic here.
+        if dst >= self.reg.len() || src >= self.reg.len() {
+            throw_error!(self, EbpfError::InvalidInstruction);
+        }
+
         if config.enable_register_tracing {
             self.vm.register_trace.push(self.reg);
         }
 
         match insn.opc {
+            // LDDW (load double word immediate) is a two-slot instruction:
+            // the first slot contains the opcode + lower 32 bits of the
+            // immediate, and the second slot (the next 8 bytes in the
+            // program) contains the upper 32 bits. The function
+            // `augment_lddw_unchecked` reads the second slot by indexing
+            // prog[(insn.ptr + 1) * 8 + 4..] — this is an unchecked
+            // slice access that panics if the LDDW is the last
+            // instruction (no room for the second slot).
+            //
+            // [UH] The verifier (check_load_dw in verifier.rs:130)
+            // rejects programs where LDDW is the last instruction. Without
+            // the verifier, `augment_lddw_unchecked` panics with "index
+            // out of range". We add a bounds check before calling it.
+            // If the second slot doesn't exist, we return ExecutionOverrun
+            // (the program is structurally malformed — it ran off the end).
             ebpf::LD_DW_IMM if !self.executable.get_sbpf_version().disable_lddw() => {
+                // Check that the second slot of the LDDW pair exists.
+                if (self.reg[11] as usize + 1) * ebpf::INSN_SIZE >= self.program.len() {
+                    throw_error!(self, EbpfError::ExecutionOverrun);
+                }
                 ebpf::augment_lddw_unchecked(self.program, &mut insn);
                 self.reg[dst] = insn.imm as u64;
                 self.reg[11] += 1;
@@ -574,11 +621,19 @@ impl<'a, 'b, C: ContextObject> Interpreter<'a, 'b, C> {
             ebpf::JSLE64_REG   => if (self.reg[dst] as i64) <= self.reg[src] as i64 { next_pc = (next_pc as i64 + insn.off as i64) as u64; },
 
             ebpf::CALL_REG   => {
+                // [UH] For V0/V1, callx encodes the register index in
+                // insn.imm (a 32-bit signed field). If imm is negative
+                // or >= 12, `self.reg[insn.imm as usize]` panics with
+                // OOB. V2 uses src, V3+ uses dst (already bounds-checked
+                // at the top of the step loop).
                 let target_pc = if self.executable.get_sbpf_version().callx_uses_src_reg() {
                     self.reg[src]
                 } else if self.executable.get_sbpf_version().callx_uses_dst_reg() {
                     self.reg[dst]
                 } else {
+                    if insn.imm < 0 || insn.imm as usize >= self.reg.len() {
+                        throw_error!(self, EbpfError::InvalidInstruction);
+                    }
                     self.reg[insn.imm as usize]
                 };
                 if !self.push_frame(config) {
