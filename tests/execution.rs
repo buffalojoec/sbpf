@@ -3922,3 +3922,217 @@ fn test_stack_gaps() {
         ProgramResult::Ok(77),
     );
 }
+
+// [UH] Tests for jump-out-of-code hardening.
+//
+// These tests construct unverified programs with OOB jump targets to ensure
+// the JIT and interpreter handle them safely (execution-time error, not panic).
+
+/// Helper: run an unverified program on both interpreter and JIT, return both results.
+#[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
+fn run_unverified_program(
+    prog: &[u8],
+    sbpf_version: SBPFVersion,
+    instruction_budget: u64,
+) -> (ProgramResult, ProgramResult) {
+    use solana_sbpf::vm::ExecutionMode;
+
+    let config = Config {
+        enable_register_tracing: true,
+        enabled_sbpf_versions: sbpf_version..=sbpf_version,
+        ..Config::default()
+    };
+    let loader = Arc::new(BuiltinProgram::new_loader(config));
+    let executable = Executable::<TestContextObject>::from_text_bytes(
+        prog,
+        loader,
+        sbpf_version,
+        FunctionRegistry::default(),
+    )
+    .unwrap();
+    // Skip verification — the point is to test unverified code.
+    executable.jit_compile().unwrap();
+
+    let result_interpreter = {
+        let mut context_object = TestContextObject::new(instruction_budget);
+        let mem_region = MemoryRegion::new_writable(&mut [], ebpf::MM_INPUT_START);
+        create_vm!(
+            vm,
+            &executable,
+            &mut context_object,
+            stack,
+            heap,
+            vec![mem_region],
+            None
+        );
+        let (_count, result) = vm.execute_program(&executable, &mut ExecutionMode::Interpreted);
+        result
+    };
+
+    let result_jit = {
+        let mut context_object = TestContextObject::new(instruction_budget);
+        let mem_region = MemoryRegion::new_writable(&mut [], ebpf::MM_INPUT_START);
+        create_vm!(
+            vm,
+            &executable,
+            &mut context_object,
+            stack,
+            heap,
+            vec![mem_region],
+            None
+        );
+        let (_count, result) = vm.execute_program(&executable, &mut ExecutionMode::Jit);
+        result
+    };
+
+    (result_interpreter, result_jit)
+}
+
+#[test]
+#[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
+fn test_err_jump_out_of_code_forward() {
+    // Program: unconditional forward jump to OOB target
+    //   insn 0: add64 r10, 0   (frame pointer init)
+    //   insn 1: ja +100        (target_pc = 1 + 100 + 1 = 102, OOB)
+    //   insn 2: exit
+    let mut prog = [0u8; 3 * ebpf::INSN_SIZE];
+    prog[0] = ebpf::ADD64_IMM;
+    prog[1] = 10; // dst = r10
+    prog[8] = ebpf::JA;
+    LittleEndian::write_i16(&mut prog[10..12], 100); // off = +100
+    prog[16] = ebpf::EXIT;
+
+    let (result_interp, result_jit) = run_unverified_program(&prog, SBPFVersion::V0, 10);
+
+    // Interpreter catches OOB on the next iteration as ExecutionOverrun.
+    // JIT catches it with CallOutsideTextSegment via the error trampoline.
+    // Both are valid runtime errors — the key is neither panics.
+    assert!(
+        result_interp.is_err(),
+        "interpreter should error on OOB jump"
+    );
+    assert!(result_jit.is_err(), "JIT should error on OOB jump");
+}
+
+#[test]
+#[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
+fn test_err_jump_out_of_code_backward() {
+    // Program: unconditional backward jump to negative OOB target
+    //   insn 0: add64 r10, 0   (frame pointer init)
+    //   insn 1: ja -100        (target_pc = 1 + (-100) + 1 = wraps to huge usize, OOB)
+    //   insn 2: exit
+    let mut prog = [0u8; 3 * ebpf::INSN_SIZE];
+    prog[0] = ebpf::ADD64_IMM;
+    prog[1] = 10; // dst = r10
+    prog[8] = ebpf::JA;
+    LittleEndian::write_i16(&mut prog[10..12], -100); // off = -100
+    prog[16] = ebpf::EXIT;
+
+    let (result_interp, result_jit) = run_unverified_program(&prog, SBPFVersion::V0, 10);
+
+    assert!(
+        result_interp.is_err(),
+        "interpreter should error on OOB backward jump"
+    );
+    assert!(result_jit.is_err(), "JIT should error on OOB backward jump");
+}
+
+#[test]
+#[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
+fn test_err_conditional_jump_out_of_code() {
+    // Program: conditional jump (taken) to OOB target
+    //   insn 0: add64 r10, 0
+    //   insn 1: mov32 r0, 1
+    //   insn 2: jeq r0, 1, +100   (condition is true, target_pc = 2 + 100 + 1 = 103, OOB)
+    //   insn 3: exit
+    let mut prog = [0u8; 4 * ebpf::INSN_SIZE];
+    prog[0] = ebpf::ADD64_IMM;
+    prog[1] = 10; // dst = r10
+    prog[8] = ebpf::MOV32_IMM;
+    prog[9] = 0; // dst = r0
+    LittleEndian::write_i32(&mut prog[12..16], 1); // imm = 1
+    prog[16] = ebpf::JEQ64_IMM;
+    prog[17] = 0; // dst = r0
+    LittleEndian::write_i16(&mut prog[18..20], 100); // off = +100
+    LittleEndian::write_i32(&mut prog[20..24], 1); // imm = 1
+    prog[24] = ebpf::EXIT;
+
+    let (result_interp, result_jit) = run_unverified_program(&prog, SBPFVersion::V0, 10);
+
+    assert!(
+        result_interp.is_err(),
+        "interpreter should error on OOB conditional jump"
+    );
+    assert!(
+        result_jit.is_err(),
+        "JIT should error on OOB conditional jump"
+    );
+}
+
+#[test]
+#[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
+fn test_ok_dead_code_jump_out_of_code() {
+    // Program: OOB jump in dead code should NOT cause an error.
+    //   insn 0: add64 r10, 0
+    //   insn 1: mov32 r0, 42
+    //   insn 2: exit
+    //   insn 3: ja +100         (dead code, OOB target — should be harmless)
+    let mut prog = [0u8; 4 * ebpf::INSN_SIZE];
+    prog[0] = ebpf::ADD64_IMM;
+    prog[1] = 10; // dst = r10
+    prog[8] = ebpf::MOV32_IMM;
+    prog[9] = 0; // dst = r0
+    LittleEndian::write_i32(&mut prog[12..16], 42); // imm = 42
+    prog[16] = ebpf::EXIT;
+    prog[24] = ebpf::JA;
+    LittleEndian::write_i16(&mut prog[26..28], 100); // off = +100
+
+    let (result_interp, result_jit) = run_unverified_program(&prog, SBPFVersion::V0, 10);
+
+    // The OOB jump is never reached, so execution should succeed.
+    assert!(
+        matches!(&result_interp, ProgramResult::Ok(42)),
+        "interpreter should succeed with dead OOB jump, got {:?}",
+        result_interp,
+    );
+    assert!(
+        matches!(&result_jit, ProgramResult::Ok(42)),
+        "JIT should succeed with dead OOB jump, got {:?}",
+        result_jit,
+    );
+}
+
+#[test]
+#[cfg(all(feature = "jit", not(target_os = "windows"), target_arch = "x86_64"))]
+fn test_ok_conditional_jump_out_of_code_not_taken() {
+    // Program: conditional OOB jump that is NOT taken.
+    //   insn 0: add64 r10, 0
+    //   insn 1: mov32 r0, 42
+    //   insn 2: jeq r0, 99, +100  (condition is false, OOB jump not taken)
+    //   insn 3: exit
+    let mut prog = [0u8; 4 * ebpf::INSN_SIZE];
+    prog[0] = ebpf::ADD64_IMM;
+    prog[1] = 10; // dst = r10
+    prog[8] = ebpf::MOV32_IMM;
+    prog[9] = 0; // dst = r0
+    LittleEndian::write_i32(&mut prog[12..16], 42); // imm = 42
+    prog[16] = ebpf::JEQ64_IMM;
+    prog[17] = 0; // dst = r0
+    LittleEndian::write_i16(&mut prog[18..20], 100); // off = +100
+    LittleEndian::write_i32(&mut prog[20..24], 99); // imm = 99
+    prog[24] = ebpf::EXIT;
+
+    let (result_interp, result_jit) = run_unverified_program(&prog, SBPFVersion::V0, 10);
+
+    // The OOB branch is not taken, so execution should succeed.
+    assert!(
+        matches!(&result_interp, ProgramResult::Ok(42)),
+        "interpreter should succeed when OOB branch not taken, got {:?}",
+        result_interp,
+    );
+    assert!(
+        matches!(&result_jit, ProgramResult::Ok(42)),
+        "JIT should succeed when OOB branch not taken, got {:?}",
+        result_jit,
+    );
+}

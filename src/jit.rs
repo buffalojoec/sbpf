@@ -231,6 +231,7 @@ const ANCHOR_CALL_UNSUPPORTED_INSTRUCTION: usize = 11;
 const ANCHOR_EXTERNAL_FUNCTION_CALL: usize = 12;
 const ANCHOR_INTERNAL_FUNCTION_CALL_PROLOGUE: usize = 13;
 const ANCHOR_INTERNAL_FUNCTION_CALL_REG: usize = 14;
+const ANCHOR_JUMP_OUT_OF_CODE: usize = 15;
 const ANCHOR_TRANSLATE_MEMORY_ADDRESS: usize = 21;
 const ANCHOR_COUNT: usize = 34; // Update me when adding or removing anchors
 
@@ -1583,6 +1584,17 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
         self.emit_set_exception_kind(EbpfError::DivideOverflow);
         self.emit_ins(X86Instruction::jump_immediate(self.relative_to_anchor(ANCHOR_THROW_EXCEPTION, 5)));
 
+        // [UH] Handler for jump-out-of-code.
+        //
+        // When an unverified program contains a jump (JA or conditional
+        // branch) whose target falls outside the program text, the JIT
+        // emits an unconditional/conditional jump to this anchor instead
+        // of trying to resolve the target PC. The error only fires at
+        // execution time (dead-code OOB jumps are harmless).
+        self.set_anchor(ANCHOR_JUMP_OUT_OF_CODE);
+        self.emit_set_exception_kind(EbpfError::CallOutsideTextSegment);
+        self.emit_ins(X86Instruction::jump_immediate(self.relative_to_anchor(ANCHOR_THROW_EXCEPTION, 5)));
+
         // See `ANCHOR_INTERNAL_FUNCTION_CALL_REG` for more details.
         self.set_anchor(ANCHOR_CALL_REG_UNSUPPORTED_INSTRUCTION);
         self.emit_ins(X86Instruction::load(OperandSize::S64, RSP, REGISTER_SCRATCH, X86IndirectAccess::OffsetIndexShift(-8, RSP, 0))); // Retrieve the current program counter from the stack
@@ -1771,6 +1783,26 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
     }
 
     fn relative_to_target_pc(&mut self, target_pc: usize, instruction_length: usize) -> i32 {
+        // [UH] Bounds-check the target PC before indexing pc_section.
+        //
+        // Without the verifier, a crafted instruction can encode an
+        // offset that places target_pc outside the program. If we
+        // index pc_section[target_pc] without checking, the JIT panics
+        // with an array-index-out-of-bounds.
+        //
+        // Fix: When target_pc is OOB we emit a load of the current PC
+        // into REGISTER_SCRATCH (for error reporting) and return the
+        // offset to ANCHOR_JUMP_OUT_OF_CODE. The caller emits a
+        // jump/call to that offset, which lands on the error trampoline
+        // at execution time. Dead-code OOB jumps compile fine — the
+        // error only fires if control flow reaches them.
+        if target_pc >= self.result.pc_section.len() {
+            self.emit_ins(X86Instruction::load_immediate(REGISTER_SCRATCH, self.pc as i64));
+            let instruction_end = unsafe { self.result.text_section.as_ptr().add(self.offset_in_text_section).add(instruction_length) };
+            let destination = self.anchors[ANCHOR_JUMP_OUT_OF_CODE];
+            debug_assert!(!destination.is_null());
+            return unsafe { destination.offset_from(instruction_end) } as i32;
+        }
         let instruction_end = unsafe { self.result.text_section.as_ptr().add(self.offset_in_text_section).add(instruction_length) };
         let destination = if self.result.pc_section[target_pc] != 0 {
             // Backward jump
@@ -1787,6 +1819,9 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
     fn resolve_jumps(&mut self) {
         // Relocate forward jumps
         for jump in &self.text_section_jumps {
+            // OOB targets are handled at emit time in relative_to_target_pc()
+            // and never added to text_section_jumps. Assert defensively.
+            debug_assert!(jump.target_pc < self.result.pc_section.len());
             let destination = &self.result.text_section[self.result.pc_section[jump.target_pc] as usize & (i32::MAX as u32 as usize)] as *const u8;
             let offset_value =
                 unsafe { destination.offset_from(jump.location) } as i32 // Relative jump
