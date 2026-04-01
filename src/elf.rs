@@ -113,6 +113,12 @@ pub enum ElfError {
     /// Invalid program header
     #[error("Invalid ELF program header")]
     InvalidProgramHeader,
+    /// Program length is not a multiple of the instruction size
+    #[error("program length must be a multiple of {} octets", ebpf::INSN_SIZE)]
+    ProgramLengthNotMultiple,
+    /// No program (empty text section)
+    #[error("no program set, text section is empty")]
+    NoProgram,
 }
 
 impl From<ElfParserError> for ElfError {
@@ -450,6 +456,7 @@ impl<C: ContextObject> Executable<C> {
     pub fn load(bytes: &[u8], loader: Arc<BuiltinProgram<C>>) -> Result<Self, ElfError> {
         let sbpf_version = get_sbpf_version(bytes)?;
         let config = loader.get_config();
+        let stricter_loader_checks = config.stricter_loader_checks;
         if !config.enabled_sbpf_versions.contains(&sbpf_version) {
             return Err(ElfError::UnsupportedSBPFVersion);
         }
@@ -460,6 +467,17 @@ impl<C: ContextObject> Executable<C> {
             Self::load_with_lenient_parser(bytes, loader)?
         };
         executable.sbpf_version = sbpf_version;
+
+        if stricter_loader_checks {
+            let (_vaddr, program) = executable.get_text_bytes();
+            if program.is_empty() {
+                return Err(ElfError::NoProgram);
+            }
+            if program.len() % ebpf::INSN_SIZE != 0 {
+                return Err(ElfError::ProgramLengthNotMultiple);
+            }
+        }
+
         Ok(executable)
     }
 

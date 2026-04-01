@@ -702,3 +702,75 @@ fn test_long_section_name() {
         SECTION_NAME_LENGTH_MAXIMUM
     );
 }
+
+/// Find the byte offset of the `.text` section header's `sh_size` field in
+/// raw ELF bytes that use section headers (V0 lenient format).
+fn patch_text_section_size(elf_bytes: &mut [u8], new_size: u64) {
+    let elf = Elf64::parse(elf_bytes).unwrap();
+    for (i, shdr) in elf.section_header_table().iter().enumerate() {
+        if elf.section_name(shdr.sh_name).ok() == Some(b".text") {
+            let shdr_offset =
+                elf.file_header().e_shoff as usize + i * std::mem::size_of::<Elf64Shdr>();
+            let sh_size_offset = shdr_offset + std::mem::offset_of!(Elf64Shdr, sh_size);
+            elf_bytes[sh_size_offset..sh_size_offset + 8].copy_from_slice(&new_size.to_le_bytes());
+            return;
+        }
+    }
+    panic!("no .text section found");
+}
+
+fn loader_v0(stricter_loader_checks: bool) -> Arc<BuiltinProgram<TestContextObject>> {
+    let mut loader = BuiltinProgram::new_loader(Config {
+        enabled_sbpf_versions: SBPFVersion::V0..=SBPFVersion::V0,
+        stricter_loader_checks,
+        ..Config::default()
+    });
+    syscalls::SyscallString::register(&mut loader, "log").unwrap();
+    syscalls::SyscallU64::register(&mut loader, "log_64").unwrap();
+    Arc::new(loader)
+}
+
+#[test]
+fn test_stricter_loader_rejects_empty_text() {
+    // The lenient parser's validate() already rejects an empty text section
+    // (EntrypointOutOfBounds), so the NoProgram check in load() serves as
+    // defense-in-depth. Verify that the load fails regardless of the flag.
+    let mut elf_bytes =
+        std::fs::read("tests/elfs/relative_call_sbpfv0.so").expect("failed to read elf file");
+    patch_text_section_size(&mut elf_bytes, 0);
+
+    let err = ElfExecutable::load(&elf_bytes, loader_v0(false)).unwrap_err();
+    assert_eq!(err, ElfError::EntrypointOutOfBounds);
+
+    let err = ElfExecutable::load(&elf_bytes, loader_v0(true)).unwrap_err();
+    assert_eq!(err, ElfError::EntrypointOutOfBounds);
+}
+
+#[test]
+fn test_stricter_loader_rejects_unaligned_text() {
+    let mut elf_bytes =
+        std::fs::read("tests/elfs/relative_call_sbpfv0.so").expect("failed to read elf file");
+    // Original text section size is a multiple of 8. Subtract 1 to make it
+    // unaligned while keeping at least one byte.
+    let original_size = {
+        let elf = Elf64::parse(&elf_bytes).unwrap();
+        let mut size = 0u64;
+        for shdr in elf.section_header_table() {
+            if elf.section_name(shdr.sh_name).ok() == Some(b".text") {
+                size = shdr.sh_size;
+                break;
+            }
+        }
+        assert!(size >= ebpf::INSN_SIZE as u64, "text section too small");
+        size
+    };
+    let unaligned_size = original_size - 1;
+    patch_text_section_size(&mut elf_bytes, unaligned_size);
+
+    // Without stricter_loader_checks the load succeeds.
+    ElfExecutable::load(&elf_bytes, loader_v0(false)).expect("should load without strict checks");
+
+    // With stricter_loader_checks it is rejected.
+    let err = ElfExecutable::load(&elf_bytes, loader_v0(true)).unwrap_err();
+    assert_eq!(err, ElfError::ProgramLengthNotMultiple);
+}
