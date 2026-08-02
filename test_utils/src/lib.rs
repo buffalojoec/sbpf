@@ -21,6 +21,7 @@ use solana_sbpf::{
 };
 use std::ptr;
 
+pub mod program;
 pub mod syscalls;
 
 /// Simple instruction meter for testing

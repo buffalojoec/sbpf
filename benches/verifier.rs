@@ -4,33 +4,32 @@
 // the MIT license <http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-#![feature(test)]
+use {
+    criterion::{criterion_group, criterion_main, Criterion, Throughput},
+    solana_sbpf::{elf::Executable, program::BuiltinProgram, verifier::RequisiteVerifier},
+    std::sync::Arc,
+    test_utils::{program::programs, TestContextObject},
+};
 
-extern crate solana_sbpf;
-extern crate test;
-extern crate test_utils;
+fn bench_verify(c: &mut Criterion) {
+    let loader = Arc::new(BuiltinProgram::new_mock());
 
-use solana_sbpf::{elf::Executable, program::BuiltinProgram, verifier::RequisiteVerifier};
-use std::{fs, sync::Arc};
-use test::Bencher;
-use test_utils::TestContextObject;
+    for program in programs() {
+        // Loading is the precondition for verifying, so it happens outside of
+        // the timed section.
+        let executable =
+            Executable::<TestContextObject>::from_elf(&program.elf, loader.clone()).unwrap();
 
-/// The same program in both encodings, so that a change to code shared by the
-/// two SBPF versions can be evaluated against both at once.
-#[bench]
-fn bench_verify_sbpfv0(bencher: &mut Bencher) {
-    let elf = fs::read("tests/elfs/relative_call_sbpfv0.so").unwrap();
-    let executable =
-        Executable::<TestContextObject>::from_elf(&elf, Arc::new(BuiltinProgram::new_mock()))
-            .unwrap();
-    bencher.iter(|| executable.verify::<RequisiteVerifier>().unwrap());
+        let mut group = c.benchmark_group(&program.name);
+        // Only the text section is verified, so the rest of the ELF would skew
+        // the throughput.
+        group.throughput(Throughput::Bytes(executable.get_text_bytes().1.len() as u64));
+        group.bench_function("verify", |b| {
+            b.iter(|| executable.verify::<RequisiteVerifier>().unwrap())
+        });
+        group.finish();
+    }
 }
 
-#[bench]
-fn bench_verify_sbpfv3(bencher: &mut Bencher) {
-    let elf = fs::read("tests/elfs/relative_call.so").unwrap();
-    let executable =
-        Executable::<TestContextObject>::from_elf(&elf, Arc::new(BuiltinProgram::new_mock()))
-            .unwrap();
-    bencher.iter(|| executable.verify::<RequisiteVerifier>().unwrap());
-}
+criterion_group!(benches, bench_verify);
+criterion_main!(benches);

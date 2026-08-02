@@ -4,29 +4,32 @@
 // the MIT license <http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-#![feature(test)]
+use {
+    criterion::{criterion_group, criterion_main, Criterion, Throughput},
+    solana_sbpf::{elf::Executable, program::BuiltinProgram},
+    std::sync::Arc,
+    test_utils::{program::programs, TestContextObject},
+};
 
-extern crate solana_sbpf;
-extern crate test;
-extern crate test_utils;
-
-use solana_sbpf::{elf::Executable, program::BuiltinProgram};
-use std::{fs, sync::Arc};
-use test::Bencher;
-use test_utils::TestContextObject;
-
-/// The same program in both encodings, so that a change to code shared by the
-/// two loading paths can be evaluated against both at once.
-#[bench]
-fn bench_load_lenient_parser(bencher: &mut Bencher) {
-    let elf = fs::read("tests/elfs/relative_call_sbpfv0.so").unwrap();
+fn bench_elf_load(c: &mut Criterion) {
     let loader = Arc::new(BuiltinProgram::new_mock());
-    bencher.iter(|| Executable::<TestContextObject>::from_elf(&elf, loader.clone()).unwrap());
+
+    for program in programs() {
+        // The two loading paths are told apart by the `v0`/`v3` prefix the
+        // corpus gives each program.
+        let mut group = c.benchmark_group(&program.name);
+        group.throughput(Throughput::Bytes(program.elf.len() as u64));
+        group.bench_function("load", |b| {
+            // Executables are dropped inside the timed section. Holding them
+            // instead retains gigabytes over a run, and the cost becomes the
+            // kernel faulting in fresh pages rather than the loader itself.
+            b.iter(|| {
+                Executable::<TestContextObject>::from_elf(&program.elf, loader.clone()).unwrap()
+            })
+        });
+        group.finish();
+    }
 }
 
-#[bench]
-fn bench_load_strict_parser(bencher: &mut Bencher) {
-    let elf = fs::read("tests/elfs/relative_call.so").unwrap();
-    let loader = Arc::new(BuiltinProgram::new_mock());
-    bencher.iter(|| Executable::<TestContextObject>::from_elf(&elf, loader.clone()).unwrap());
-}
+criterion_group!(benches, bench_elf_load);
+criterion_main!(benches);

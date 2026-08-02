@@ -46,6 +46,15 @@ shuttle-test = ["dep:shuttle"]
 conf-stack-frame-size = []
 
 [dev-dependencies]
+criterion = "0.8.2"
 elf = "0.0.10"
 json = "0.12"
 test_utils = { path = "test_utils/" }
+
+[[bench]]
+name = "elf_loader"
+harness = false
+
+[[bench]]
+name = "verifier"
+harness = false
