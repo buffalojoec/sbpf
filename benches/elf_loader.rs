@@ -10,26 +10,23 @@ extern crate solana_sbpf;
 extern crate test;
 extern crate test_utils;
 
-use solana_sbpf::{
-    elf::Executable,
-    program::{BuiltinFunctionDefinition, BuiltinProgram},
-    vm::Config,
-};
-use std::{fs::File, io::Read, sync::Arc};
+use solana_sbpf::{elf::Executable, program::BuiltinProgram};
+use std::{fs, sync::Arc};
 use test::Bencher;
-use test_utils::{syscalls, TestContextObject};
+use test_utils::TestContextObject;
 
-fn loader() -> Arc<BuiltinProgram<TestContextObject>> {
-    let mut loader = BuiltinProgram::new_loader(Config::default());
-    syscalls::SyscallString::register(&mut loader, "log").unwrap();
-    Arc::new(loader)
+/// The same program in both encodings, so that a change to code shared by the
+/// two loading paths can be evaluated against both at once.
+#[bench]
+fn bench_load_lenient_parser(bencher: &mut Bencher) {
+    let elf = fs::read("tests/elfs/relative_call_sbpfv0.so").unwrap();
+    let loader = Arc::new(BuiltinProgram::new_mock());
+    bencher.iter(|| Executable::<TestContextObject>::from_elf(&elf, loader.clone()).unwrap());
 }
 
 #[bench]
-fn bench_load_sbpfv0(bencher: &mut Bencher) {
-    let mut file = File::open("tests/elfs/syscall_reloc_64_32_sbpfv0.so").unwrap();
-    let mut elf = Vec::new();
-    file.read_to_end(&mut elf).unwrap();
-    let loader = loader();
+fn bench_load_strict_parser(bencher: &mut Bencher) {
+    let elf = fs::read("tests/elfs/relative_call.so").unwrap();
+    let loader = Arc::new(BuiltinProgram::new_mock());
     bencher.iter(|| Executable::<TestContextObject>::from_elf(&elf, loader.clone()).unwrap());
 }
