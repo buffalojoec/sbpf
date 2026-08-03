@@ -99,3 +99,29 @@ cold paths.
 | `4MangoMjqJ2firMokCjjGgoK8d4MXcrgL7XJaL3w6fVg` | 3501 | 1.37 ms | 2.07 ms | -34% | -59% |
 | `FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn` | 6892 | 1.96 ms | 2.89 ms | -32% | -61% |
 | `UMBRAD2ishebJTcgCLkTkNUx1v3GyoAgpTRPeWoLykh` | 7058 | 2.14 ms | 3.15 ms | -32% | -67% |
+
+## `elf: register each call target once instead of once per call site`
+
+v0 load: median **-25%**, best -42% (`4Mango`), worst -4% (`D9ek6q`).
+Cumulative against the baseline: **-75%** median. v3 within noise.
+
+Programs call the same function from many places -- `UMBRAD` has 40372 call
+sites against 2517 distinct targets, and `4Mango` 29684 against 1338. The pass
+hashed the target and went to the registry at every site, so caching the key per
+target removes roughly fifteen out of every sixteen of those.
+
+### v0
+
+| Program | Size | `load` | Before | Δ | vs baseline |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `D9ek6qwZgvbksJLzXeG9jaNFJgdp68A3iC5yLynieJQp` | 30 | 9.50 us | 9.95 us | -4% | -61% |
+| `MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr` | 73 | 24.3 us | 25.4 us | -5% | -60% |
+| `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL` | 102 | 24.1 us | 30.2 us | -20% | -66% |
+| `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` | 106 | 12.4 us | 14.9 us | -17% | -79% |
+| `D67re8wUwwZ12ni1fMbzaqwfcG3atiRrMMvptEZmENGs` | 199 | 44.3 us | 55.2 us | -20% | -69% |
+| `LGDSXVcDx4Ynw7UXavGEe5nwzyUZZ5d3sLkwYk26LUf` | 450 | 91.3 us | 125 us | -27% | -76% |
+| `darkr3FB87qAZmgLwKov6Hk9Yiah5UT4rUYu8Zhthw1` | 800 | 163 us | 226 us | -28% | -75% |
+| `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb` | 1349 | 160 us | 214 us | -25% | -70% |
+| `4MangoMjqJ2firMokCjjGgoK8d4MXcrgL7XJaL3w6fVg` | 3501 | 793 us | 1.37 ms | -42% | -76% |
+| `FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn` | 6892 | 1.25 ms | 1.96 ms | -37% | -75% |
+| `UMBRAD2ishebJTcgCLkTkNUx1v3GyoAgpTRPeWoLykh` | 7058 | 1.39 ms | 2.14 ms | -35% | -78% |

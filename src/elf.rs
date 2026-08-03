@@ -19,7 +19,7 @@ use crate::{
     },
     error::EbpfError,
     memory_region::MemoryRegion,
-    program::{BuiltinProgram, FunctionRegistry, SBPFVersion},
+    program::{BuiltinProgram, FunctionRegistry, KeyMap, SBPFVersion},
     verifier::Verifier,
     vm::{Config, ContextObject},
 };
@@ -28,7 +28,7 @@ use crate::{
 use crate::jit::{JitCompiler, JitProgram};
 use byteorder::{ByteOrder, LittleEndian};
 use std::{
-    collections::BTreeMap,
+    collections::{hash_map::Entry, BTreeMap},
     fmt::Debug,
     mem::{self, offset_of},
     ops::Range,
@@ -1008,6 +1008,11 @@ impl<C: ContextObject> Executable<C> {
             .len()
             .checked_div(ebpf::INSN_SIZE)
             .ok_or(ElfError::ValueOutOfBounds)?;
+        // Programs call the same function from many places, so the key of each
+        // target is cached: hashing a target and looking it up in the registry
+        // together cost several times what the cache lookup does.
+        let mut target_keys = KeyMap::<u32>::default();
+
         // Only the opcode and the immediate are of interest here, so the
         // instructions are not decoded in full. Iterating over fixed size
         // chunks also lets the immediate be read and written back without
@@ -1029,17 +1034,22 @@ impl<C: ContextObject> Executable<C> {
             if target_pc < 0 || target_pc >= instruction_count as isize {
                 return Err(ElfError::RelativeJumpOutOfBounds(i));
             }
-            let name = if config.enable_symbol_and_section_labels {
-                format!("function_{target_pc}")
-            } else {
-                String::default()
+            let key = match target_keys.entry(target_pc as u32) {
+                Entry::Occupied(entry) => *entry.get(),
+                Entry::Vacant(entry) => {
+                    let name = if config.enable_symbol_and_section_labels {
+                        format!("function_{target_pc}")
+                    } else {
+                        String::default()
+                    };
+                    *entry.insert(function_registry.register_function_hashed_legacy(
+                        loader,
+                        true,
+                        name.as_bytes(),
+                        target_pc as usize,
+                    )?)
+                }
             };
-            let key = function_registry.register_function_hashed_legacy(
-                loader,
-                true,
-                name.as_bytes(),
-                target_pc as usize,
-            )?;
             LittleEndian::write_u32(&mut insn[BYTE_OFFSET_IMMEDIATE..], key);
         }
 

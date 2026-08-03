@@ -130,7 +130,10 @@ impl Hasher for FunctionKeyHasher {
     }
 }
 
-type FunctionMap<T> = HashMap<u32, (Vec<u8>, T), BuildHasherDefault<FunctionKeyHasher>>;
+/// A map keyed by a symbol hash or a program counter.
+pub(crate) type KeyMap<V> = HashMap<u32, V, BuildHasherDefault<FunctionKeyHasher>>;
+
+type FunctionMap<T> = KeyMap<(Vec<u8>, T)>;
 
 /// Holds the function symbols of an Executable
 #[derive(Debug, PartialEq, Eq)]
