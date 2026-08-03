@@ -5,7 +5,10 @@ use {
         elf::ElfError,
         vm::{Config, ContextObject, EncryptedHostAddressToEbpfVm},
     },
-    std::collections::{btree_map::Entry, BTreeMap},
+    std::{
+        collections::{hash_map::Entry, HashMap},
+        hash::{BuildHasherDefault, Hasher},
+    },
 };
 
 /// Defines a set of sbpf_version of an executable
@@ -103,16 +106,42 @@ impl SBPFVersion {
     }
 }
 
+/// Hashes [FunctionRegistry] keys.
+///
+/// The keys are either symbol hashes or program counters, so they already carry
+/// their own entropy and only have to be spread over the hash space rather than
+/// run through a general purpose hash function.
+#[derive(Default)]
+pub(crate) struct FunctionKeyHasher(u64);
+
+impl Hasher for FunctionKeyHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.write_u32(*byte as u32);
+        }
+    }
+
+    fn write_u32(&mut self, key: u32) {
+        self.0 = (self.0 ^ key as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    }
+}
+
+type FunctionMap<T> = HashMap<u32, (Vec<u8>, T), BuildHasherDefault<FunctionKeyHasher>>;
+
 /// Holds the function symbols of an Executable
 #[derive(Debug, PartialEq, Eq)]
 pub struct FunctionRegistry<T> {
-    pub(crate) map: BTreeMap<u32, (Vec<u8>, T)>,
+    pub(crate) map: FunctionMap<T>,
 }
 
 impl<T> Default for FunctionRegistry<T> {
     fn default() -> Self {
         Self {
-            map: BTreeMap::new(),
+            map: FunctionMap::default(),
         }
     }
 }
@@ -182,15 +211,25 @@ impl<T: Copy + PartialEq> FunctionRegistry<T> {
     }
 
     /// Iterate over all keys
+    ///
+    /// Ordered by key, as callers rely on the iteration order being stable.
     pub fn keys(&self) -> impl Iterator<Item = u32> + '_ {
-        self.map.keys().copied()
+        let mut keys = self.map.keys().copied().collect::<Vec<_>>();
+        keys.sort_unstable();
+        keys.into_iter()
     }
 
     /// Iterate over all entries
+    ///
+    /// Ordered by key, as callers rely on the iteration order being stable.
     pub fn iter(&self) -> impl Iterator<Item = (u32, (&[u8], T))> + '_ {
-        self.map
+        let mut entries = self
+            .map
             .iter()
             .map(|(key, (name, value))| (*key, (name.as_slice(), *value)))
+            .collect::<Vec<_>>();
+        entries.sort_unstable_by_key(|(key, _)| *key);
+        entries.into_iter()
     }
 
     /// Get a function by its key

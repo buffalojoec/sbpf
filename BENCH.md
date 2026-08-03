@@ -71,3 +71,31 @@ the immediate be written back without re-checking the section bounds.
 
 v3 loads do not go through `relocate` and moved by -8%..+25%, which is the noise
 floor for a path that is a `memcpy` and a handful of header checks.
+
+## `program: index the function registry by hash instead of by order`
+
+v0 load: median **-29%**, best -35% (`darkr3`), worst -18% (`D9ek6q`).
+Cumulative against the baseline: **-61%** median. v3 within noise.
+
+Every call site in `relocate` performs one registry operation, and each cost
+42 ns against the `BTreeMap` -- four times the 10 ns of the symbol hash it looks
+up. The keys are already symbol hashes or program counters, so a `HashMap` that
+only spreads them over the hash space replaces the ordered tree. `iter` and
+`keys` sort on the way out, since callers depend on a stable order and both are
+cold paths.
+
+### v0
+
+| Program | Size | `load` | Before | Δ | vs baseline |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `D9ek6qwZgvbksJLzXeG9jaNFJgdp68A3iC5yLynieJQp` | 30 | 9.95 us | 12.1 us | -18% | -60% |
+| `MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr` | 73 | 25.4 us | 35.9 us | -29% | -58% |
+| `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL` | 102 | 30.2 us | 40.0 us | -25% | -58% |
+| `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` | 106 | 14.9 us | 18.5 us | -19% | -75% |
+| `D67re8wUwwZ12ni1fMbzaqwfcG3atiRrMMvptEZmENGs` | 199 | 55.2 us | 71.1 us | -22% | -61% |
+| `LGDSXVcDx4Ynw7UXavGEe5nwzyUZZ5d3sLkwYk26LUf` | 450 | 125 us | 189 us | -34% | -67% |
+| `darkr3FB87qAZmgLwKov6Hk9Yiah5UT4rUYu8Zhthw1` | 800 | 226 us | 349 us | -35% | -65% |
+| `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb` | 1349 | 214 us | 289 us | -26% | -60% |
+| `4MangoMjqJ2firMokCjjGgoK8d4MXcrgL7XJaL3w6fVg` | 3501 | 1.37 ms | 2.07 ms | -34% | -59% |
+| `FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn` | 6892 | 1.96 ms | 2.89 ms | -32% | -61% |
+| `UMBRAD2ishebJTcgCLkTkNUx1v3GyoAgpTRPeWoLykh` | 7058 | 2.14 ms | 3.15 ms | -32% | -67% |
