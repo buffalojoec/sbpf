@@ -125,3 +125,34 @@ target removes roughly fifteen out of every sixteen of those.
 | `4MangoMjqJ2firMokCjjGgoK8d4MXcrgL7XJaL3w6fVg` | 3501 | 793 us | 1.37 ms | -42% | -76% |
 | `FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn` | 6892 | 1.25 ms | 1.96 ms | -37% | -75% |
 | `UMBRAD2ishebJTcgCLkTkNUx1v3GyoAgpTRPeWoLykh` | 7058 | 1.39 ms | 2.14 ms | -35% | -78% |
+
+## `elf: let the caller hand over the ELF buffer`
+
+v3 `load_owned`: median **-99%**, worst -87% (`FmGfWt`). v0 unaffected.
+
+A strict load was measured at 93-103% `AlignedMemory::from_slice` -- it is a
+`memcpy` and a handful of header checks, and nothing else. `load` has to copy
+because the executable outlives the call, so `load_owned` takes an
+`AlignedMemory` the caller already holds and keeps it. Only the strict parser
+can use it: relocation reads the unrelocated ELF while writing the relocated
+one, so the lenient parser needs a second buffer regardless.
+
+This moves the copy rather than deleting it. A caller which only has a slice to
+lend gains nothing and should keep using `load`. The gain is real only for one
+which can fill an `AlignedMemory` directly, from a file or an account, and hand
+it over. The figures below exclude building that buffer, which is the caller's
+cost and happens in criterion's untimed setup.
+
+### v3
+
+| Program | Size | `load` | `load_owned` | Δ |
+| --- | ---: | ---: | ---: | ---: |
+| `FmGfWtigbVnYrqryq5z5GdCzCc3XcFa36h86P26qncr1` | 29 | 795 ns | 102 ns | -87% |
+| `53o2tVBfNXj4DgmDKjUWPC9Hszw6zYNG11CY66irhU74` | 80 | 1.98 us | 99 ns | -95% |
+| `3XjiiaQhwpu1NccV4dVGc9LqbmKGqfJNCbSj3KnXyCSR` | 113 | 2.60 us | 122 ns | -95% |
+| `5zqNuvXY7yLtM1KsjxwFgFNxR56Kfzrg3auFdV7viEcP` | 198 | 5.09 us | 141 ns | -97% |
+| `vuHFdYXjv9ePz6CRGXyQRzRfRLX3yyT8zG5hGiUpwF6` | 341 | 11.6 us | 165 ns | -99% |
+| `45s36RbsPudmfu82YhE7WXDWzcyJvppfxKYUgCXM6sB5` | 676 | 22.2 us | 193 ns | -99% |
+| `FYaHz8zsZzZJetMmU1uxwfzkU8aryPoWyFsSbm69D44G` | 1166 | 46.8 us | 192 ns | -100% |
+| `LendVMybdnkGL9yX9VFJamrtCSzL3izpUoB9JDhSU6M` | 1185 | 41.3 us | 184 ns | -100% |
+| `CQwWoJENUtKmwCMqnyGbEYkg41oxdat23kkNdJLvY7v9` | 3345 | 138 us | 342 ns | -100% |

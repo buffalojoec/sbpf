@@ -2,7 +2,8 @@
 
 use byteorder::{ByteOrder, LittleEndian};
 use solana_sbpf::{
-    ebpf,
+    aligned_memory::AlignedMemory,
+    ebpf::{self, HOST_ALIGN},
     elf::{get_ro_region, ElfError, Executable, Section},
     elf_parser::{
         consts::{ELFCLASS32, ELFCLASS64, ELFDATA2LSB, ELFDATA2MSB, ELFOSABI_NONE, EM_BPF, ET_REL},
@@ -190,6 +191,58 @@ fn test_load() {
     file.read_to_end(&mut elf_bytes)
         .expect("failed to read elf file");
     ElfExecutable::load(&elf_bytes, loader()).expect("validation failed");
+}
+
+#[test]
+fn test_load_owned_matches_load() {
+    // The strict parser keeps the handed over buffer instead of copying it, so
+    // check that doing so leaves the executable identical to a borrowed load.
+    for path in [
+        "tests/elfs/relative_call_sbpfv0.so",
+        "tests/elfs/relative_call.so",
+        "tests/elfs/strict_header.so",
+        "tests/elfs/rodata_section.so",
+    ] {
+        let elf_bytes = std::fs::read(path).expect("failed to read elf file");
+        let borrowed = ElfExecutable::load(&elf_bytes, loader()).expect("validation failed");
+        let owned = ElfExecutable::load_owned(
+            AlignedMemory::<{ HOST_ALIGN }>::from_slice(&elf_bytes),
+            loader(),
+        )
+        .expect("validation failed");
+
+        assert_eq!(
+            borrowed.get_sbpf_version(),
+            owned.get_sbpf_version(),
+            "{path}"
+        );
+        assert_eq!(
+            borrowed.get_text_bytes(),
+            owned.get_text_bytes(),
+            "{}",
+            path
+        );
+        assert_eq!(
+            borrowed.get_ro_section(),
+            owned.get_ro_section(),
+            "{}",
+            path
+        );
+        assert_eq!(
+            borrowed.get_entrypoint_instruction_offset(),
+            owned.get_entrypoint_instruction_offset(),
+            "{}",
+            path
+        );
+        assert!(
+            borrowed
+                .get_function_registry()
+                .iter()
+                .eq(owned.get_function_registry().iter()),
+            "{}",
+            path
+        );
+    }
 }
 
 #[test]

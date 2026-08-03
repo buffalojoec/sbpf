@@ -5,8 +5,10 @@
 // copied, modified, or distributed except according to those terms.
 
 use {
-    criterion::{criterion_group, criterion_main, Criterion, Throughput},
-    solana_sbpf::{elf::Executable, program::BuiltinProgram},
+    criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput},
+    solana_sbpf::{
+        aligned_memory::AlignedMemory, ebpf::HOST_ALIGN, elf::Executable, program::BuiltinProgram,
+    },
     std::sync::Arc,
     test_utils::{program::programs, TestContextObject},
 };
@@ -26,6 +28,24 @@ fn bench_elf_load(c: &mut Criterion) {
             b.iter(|| {
                 Executable::<TestContextObject>::from_elf(&program.elf, loader.clone()).unwrap()
             })
+        });
+        // Only the strict parser can use a handed over buffer, so benchmarking
+        // the lenient ones here would just report the batching overhead of
+        // allocating a fresh buffer per iteration.
+        if !program.is_strict() {
+            group.finish();
+            continue;
+        }
+        group.bench_function("load_owned", |b| {
+            // Building the buffer happens in the setup, which criterion does
+            // not time. This is therefore the cost to a caller which already
+            // holds the ELF in an `AlignedMemory` and hands it over, not to one
+            // which only has a slice to lend.
+            b.iter_batched(
+                || AlignedMemory::<{ HOST_ALIGN }>::from_slice(&program.elf),
+                |elf| Executable::<TestContextObject>::load_owned(elf, loader.clone()).unwrap(),
+                BatchSize::PerIteration,
+            )
         });
         group.finish();
     }

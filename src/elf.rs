@@ -484,9 +484,47 @@ impl<C: ContextObject> Executable<C> {
         Ok(executable)
     }
 
+    /// Fully loads an ELF from a buffer which the caller hands over
+    ///
+    /// [Self::load] has to copy the bytes it is lent, because the executable
+    /// outlives the call. A caller which can produce them in an [AlignedMemory]
+    /// to begin with can hand that over here instead and skip the copy.
+    ///
+    /// Only the strict parser benefits: relocation has to read the unrelocated
+    /// ELF while it writes the relocated one, so the lenient parser needs a
+    /// second buffer either way.
+    pub fn load_owned(
+        bytes: AlignedMemory<{ HOST_ALIGN }>,
+        loader: Arc<BuiltinProgram<C>>,
+    ) -> Result<Self, ElfError> {
+        let sbpf_version = get_sbpf_version(bytes.as_slice())?;
+        let config = loader.get_config();
+        if !config.enabled_sbpf_versions.contains(&sbpf_version) {
+            return Err(ElfError::UnsupportedSBPFVersion);
+        }
+
+        let mut executable = if sbpf_version.enable_stricter_elf_headers() {
+            Self::load_with_strict_parser_owned(bytes, loader)?
+        } else {
+            Self::load_with_lenient_parser(bytes.as_slice(), loader)?
+        };
+        executable.sbpf_version = sbpf_version;
+        Ok(executable)
+    }
+
     /// Loads an ELF without relocation
     pub fn load_with_strict_parser(
         bytes: &[u8],
+        loader: Arc<BuiltinProgram<C>>,
+    ) -> Result<Self, ElfParserError> {
+        Self::load_with_strict_parser_owned(AlignedMemory::from_slice(bytes), loader)
+    }
+
+    /// Loads an ELF without relocation from a buffer which the caller hands over
+    ///
+    /// See [Self::load_owned].
+    pub fn load_with_strict_parser_owned(
+        aligned_memory: AlignedMemory<{ HOST_ALIGN }>,
         loader: Arc<BuiltinProgram<C>>,
     ) -> Result<Self, ElfParserError> {
         use crate::elf_parser::{
@@ -494,7 +532,6 @@ impl<C: ContextObject> Executable<C> {
             types::Elf64Sym,
         };
 
-        let aligned_memory = AlignedMemory::<{ HOST_ALIGN }>::from_slice(bytes);
         let elf_bytes = aligned_memory.as_slice();
 
         let (file_header_range, file_header) = Elf64::parse_file_header(elf_bytes)?;
