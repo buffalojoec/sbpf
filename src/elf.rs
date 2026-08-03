@@ -1008,32 +1008,39 @@ impl<C: ContextObject> Executable<C> {
             .len()
             .checked_div(ebpf::INSN_SIZE)
             .ok_or(ElfError::ValueOutOfBounds)?;
-        for i in 0..instruction_count {
-            let insn = ebpf::get_insn(text_bytes, i);
-            if insn.opc == ebpf::CALL_IMM && insn.imm != -1 {
-                let target_pc = (i as isize)
-                    .saturating_add(1)
-                    .saturating_add(insn.imm as isize);
-                if target_pc < 0 || target_pc >= instruction_count as isize {
-                    return Err(ElfError::RelativeJumpOutOfBounds(i));
-                }
-                let name = if config.enable_symbol_and_section_labels {
-                    format!("function_{target_pc}")
-                } else {
-                    String::default()
-                };
-                let key = function_registry.register_function_hashed_legacy(
-                    loader,
-                    true,
-                    name.as_bytes(),
-                    target_pc as usize,
-                )?;
-                let offset = i.saturating_mul(ebpf::INSN_SIZE).saturating_add(4);
-                let checked_slice = text_bytes
-                    .get_mut(offset..offset.saturating_add(4))
-                    .ok_or(ElfError::ValueOutOfBounds)?;
-                LittleEndian::write_u32(checked_slice, key);
+        // Only the opcode and the immediate are of interest here, so the
+        // instructions are not decoded in full. Iterating over fixed size
+        // chunks also lets the immediate be read and written back without
+        // re-checking the bounds of the text section for every access.
+        for (i, insn) in text_bytes
+            .as_chunks_mut::<{ ebpf::INSN_SIZE }>()
+            .0
+            .iter_mut()
+            .enumerate()
+        {
+            if insn[0] != ebpf::CALL_IMM {
+                continue;
             }
+            let imm = LittleEndian::read_i32(&insn[BYTE_OFFSET_IMMEDIATE..]);
+            if imm == -1 {
+                continue;
+            }
+            let target_pc = (i as isize).saturating_add(1).saturating_add(imm as isize);
+            if target_pc < 0 || target_pc >= instruction_count as isize {
+                return Err(ElfError::RelativeJumpOutOfBounds(i));
+            }
+            let name = if config.enable_symbol_and_section_labels {
+                format!("function_{target_pc}")
+            } else {
+                String::default()
+            };
+            let key = function_registry.register_function_hashed_legacy(
+                loader,
+                true,
+                name.as_bytes(),
+                target_pc as usize,
+            )?;
+            LittleEndian::write_u32(&mut insn[BYTE_OFFSET_IMMEDIATE..], key);
         }
 
         // Fixup all the relocations in the relocation section if exists

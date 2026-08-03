@@ -42,3 +42,32 @@ be representative.
 | `FYaHz8zsZzZJetMmU1uxwfzkU8aryPoWyFsSbm69D44G` | 1166 | 34.7 us | 812 us | 23x |
 | `LendVMybdnkGL9yX9VFJamrtCSzL3izpUoB9JDhSU6M` | 1185 | 46.2 us | 887 us | 19x |
 | `CQwWoJENUtKmwCMqnyGbEYkg41oxdat23kkNdJLvY7v9` | 3345 | 137 us | 1.96 ms | 14x |
+
+## `elf: skip full instruction decode in the call relocation pass`
+
+v0 load: median **-47%**, best -69% (`Tokenkeg`), worst -38% (`4Mango`). v3 and
+`verify` untouched.
+
+`relocate` walked `.text` with `ebpf::get_insn`, which decodes all six fields of
+every instruction and bounds-checks each read, to look at two of them. Reading
+the opcode and the immediate out of fixed size chunks drops the decode and lets
+the immediate be written back without re-checking the section bounds.
+
+### v0
+
+| Program | Size | `load` | Before | Δ |
+| --- | ---: | ---: | ---: | ---: |
+| `D9ek6qwZgvbksJLzXeG9jaNFJgdp68A3iC5yLynieJQp` | 30 | 12.1 us | 24.7 us | -51% |
+| `MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr` | 73 | 35.9 us | 60.2 us | -40% |
+| `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL` | 102 | 40.0 us | 71.3 us | -44% |
+| `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` | 106 | 18.5 us | 59.4 us | -69% |
+| `D67re8wUwwZ12ni1fMbzaqwfcG3atiRrMMvptEZmENGs` | 199 | 71.1 us | 141 us | -50% |
+| `LGDSXVcDx4Ynw7UXavGEe5nwzyUZZ5d3sLkwYk26LUf` | 450 | 189 us | 379 us | -50% |
+| `darkr3FB87qAZmgLwKov6Hk9Yiah5UT4rUYu8Zhthw1` | 800 | 349 us | 641 us | -46% |
+| `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb` | 1349 | 289 us | 536 us | -46% |
+| `4MangoMjqJ2firMokCjjGgoK8d4MXcrgL7XJaL3w6fVg` | 3501 | 2.07 ms | 3.34 ms | -38% |
+| `FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn` | 6892 | 2.89 ms | 4.99 ms | -42% |
+| `UMBRAD2ishebJTcgCLkTkNUx1v3GyoAgpTRPeWoLykh` | 7058 | 3.15 ms | 6.44 ms | -51% |
+
+v3 loads do not go through `relocate` and moved by -8%..+25%, which is the noise
+floor for a path that is a `memcpy` and a handful of header checks.
