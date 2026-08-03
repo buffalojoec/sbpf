@@ -156,3 +156,46 @@ cost and happens in criterion's untimed setup.
 | `FYaHz8zsZzZJetMmU1uxwfzkU8aryPoWyFsSbm69D44G` | 1166 | 46.8 us | 192 ns | -100% |
 | `LendVMybdnkGL9yX9VFJamrtCSzL3izpUoB9JDhSU6M` | 1185 | 41.3 us | 184 ns | -100% |
 | `CQwWoJENUtKmwCMqnyGbEYkg41oxdat23kkNdJLvY7v9` | 3345 | 138 us | 342 ns | -100% |
+
+## `verifier: decode instructions from fixed size slots`
+
+`verify`: v0 median **-7%**, v3 median **-9%**. Both parsers share the verifier,
+so this lands on each of them.
+
+The loop decoded every instruction with `ebpf::get_insn`, which bounds-checks
+each of its six field reads separately. Walking fixed size slots instead lets
+them be read unchecked. `check_load_dw` and `check_jmp_offset` only look at the
+opcode of the instruction they inspect, so they now read that one byte rather
+than decoding it whole, and `check_jmp_offset` no longer re-decodes the
+instruction it was already handed. Its bounds test is now the destination lookup
+itself, since landing inside the program is what puts it in range.
+
+### v0
+
+| Program | Size | `verify` | Before | Δ |
+| --- | ---: | ---: | ---: | ---: |
+| `D9ek6qwZgvbksJLzXeG9jaNFJgdp68A3iC5yLynieJQp` | 30 | 22.3 us | 24.0 us | -7% |
+| `MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr` | 73 | 49.1 us | 52.2 us | -6% |
+| `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL` | 102 | 74.4 us | 78.9 us | -6% |
+| `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` | 106 | 76.9 us | 87.3 us | -12% |
+| `D67re8wUwwZ12ni1fMbzaqwfcG3atiRrMMvptEZmENGs` | 199 | 125 us | 134 us | -7% |
+| `LGDSXVcDx4Ynw7UXavGEe5nwzyUZZ5d3sLkwYk26LUf` | 450 | 293 us | 322 us | -9% |
+| `darkr3FB87qAZmgLwKov6Hk9Yiah5UT4rUYu8Zhthw1` | 800 | 490 us | 568 us | -14% |
+| `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb` | 1349 | 445 us | 479 us | -7% |
+| `4MangoMjqJ2firMokCjjGgoK8d4MXcrgL7XJaL3w6fVg` | 3501 | 2.30 ms | 2.37 ms | -3% |
+| `FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn` | 6892 | 3.83 ms | 3.80 ms | +1% |
+| `UMBRAD2ishebJTcgCLkTkNUx1v3GyoAgpTRPeWoLykh` | 7058 | 4.39 ms | 5.00 ms | -12% |
+
+### v3
+
+| Program | Size | `verify` | Before | Δ |
+| --- | ---: | ---: | ---: | ---: |
+| `FmGfWtigbVnYrqryq5z5GdCzCc3XcFa36h86P26qncr1` | 29 | 15.4 us | 17.6 us | -13% |
+| `53o2tVBfNXj4DgmDKjUWPC9Hszw6zYNG11CY66irhU74` | 80 | 62.6 us | 68.4 us | -8% |
+| `3XjiiaQhwpu1NccV4dVGc9LqbmKGqfJNCbSj3KnXyCSR` | 113 | 77.8 us | 87.2 us | -11% |
+| `5zqNuvXY7yLtM1KsjxwFgFNxR56Kfzrg3auFdV7viEcP` | 198 | 135 us | 156 us | -13% |
+| `vuHFdYXjv9ePz6CRGXyQRzRfRLX3yyT8zG5hGiUpwF6` | 341 | 229 us | 252 us | -9% |
+| `45s36RbsPudmfu82YhE7WXDWzcyJvppfxKYUgCXM6sB5` | 676 | 439 us | 483 us | -9% |
+| `FYaHz8zsZzZJetMmU1uxwfzkU8aryPoWyFsSbm69D44G` | 1166 | 757 us | 832 us | -9% |
+| `LendVMybdnkGL9yX9VFJamrtCSzL3izpUoB9JDhSU6M` | 1185 | 780 us | 832 us | -6% |
+| `CQwWoJENUtKmwCMqnyGbEYkg41oxdat23kkNdJLvY7v9` | 3345 | 1.86 ms | 2.00 ms | -7% |

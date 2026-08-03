@@ -127,34 +127,56 @@ fn check_imm_aligned(
     }
 }
 
-fn check_load_dw(prog: &[u8], insn_ptr: usize) -> Result<(), VerifierError> {
-    if (insn_ptr + 1) * ebpf::INSN_SIZE >= prog.len() {
+/// A single instruction slot of the program
+type Slot = [u8; ebpf::INSN_SIZE];
+
+/// Decodes the instruction in the given slot.
+///
+/// Unlike [ebpf::get_insn] the slot has a length known at compile time, so the
+/// fields are read without bounds checking each one of them.
+fn decode(slot: &Slot, insn_ptr: usize) -> ebpf::Insn {
+    ebpf::Insn {
+        ptr: insn_ptr,
+        opc: slot[0],
+        dst: slot[1] & 0x0f,
+        src: (slot[1] & 0xf0) >> 4,
+        off: i16::from_le_bytes([slot[2], slot[3]]),
+        imm: i32::from_le_bytes([slot[4], slot[5], slot[6], slot[7]]) as i64,
+    }
+}
+
+fn check_load_dw(prog: &[Slot], insn_ptr: usize) -> Result<(), VerifierError> {
+    let Some(next_insn) = prog.get(insn_ptr + 1) else {
         // Last instruction cannot be LD_DW because there would be no 2nd DW
         return Err(VerifierError::LDDWCannotBeLast);
-    }
-    let next_insn = ebpf::get_insn(prog, insn_ptr + 1);
-    if next_insn.opc != 0 {
+    };
+    // Only the opcode of the second slot is of interest
+    if next_insn[0] != 0 {
         return Err(VerifierError::IncompleteLDDW(insn_ptr));
     }
     Ok(())
 }
 
 fn check_jmp_offset(
-    prog: &[u8],
+    prog: &[Slot],
+    insn: &ebpf::Insn,
     insn_ptr: usize,
-    program_range: &std::ops::Range<usize>,
 ) -> Result<(), VerifierError> {
-    let insn = ebpf::get_insn(prog, insn_ptr);
-
     let dst_insn_ptr = insn_ptr as isize + 1 + insn.off as isize;
-    if dst_insn_ptr < 0 || !program_range.contains(&(dst_insn_ptr as usize)) {
+    // Landing inside the program is what puts the destination in range, so the
+    // lookup doubles as the bounds check.
+    let Some(dst_insn) = (if dst_insn_ptr < 0 {
+        None
+    } else {
+        prog.get(dst_insn_ptr as usize)
+    }) else {
         return Err(VerifierError::JumpOutOfCode(
             dst_insn_ptr as usize,
             insn_ptr,
         ));
-    }
-    let dst_insn = ebpf::get_insn(prog, dst_insn_ptr as usize);
-    if dst_insn.opc == 0 {
+    };
+    // Only the opcode of the destination is of interest
+    if dst_insn[0] == 0 {
         return Err(VerifierError::JumpToMiddleOfLDDW(
             dst_insn_ptr as usize,
             insn_ptr,
@@ -222,10 +244,12 @@ impl Verifier for RequisiteVerifier {
     fn verify(prog: &[u8], _config: &Config, sbpf_version: SBPFVersion) -> Result<(), VerifierError> {
         check_prog_len(prog)?;
 
-        let program_range = 0..prog.len() / ebpf::INSN_SIZE;
+        // `check_prog_len` rejects a trailing partial instruction, so the
+        // program is exactly this many whole slots.
+        let prog = prog.as_chunks::<{ ebpf::INSN_SIZE }>().0;
         let mut insn_ptr: usize = 0;
-        while (insn_ptr + 1) * ebpf::INSN_SIZE <= prog.len() {
-            let insn = ebpf::get_insn(prog, insn_ptr);
+        while let Some(slot) = prog.get(insn_ptr) {
+            let insn = decode(slot, insn_ptr);
             let mut store = false;
 
             match insn.opc {
@@ -372,7 +396,7 @@ impl Verifier for RequisiteVerifier {
                 | ebpf::JSLT32_IMM
                 | ebpf::JSLT32_REG
                 | ebpf::JSLE32_IMM
-                | ebpf::JSLE32_REG if sbpf_version.enable_jmp32() => { check_jmp_offset(prog, insn_ptr, &program_range)?; },
+                | ebpf::JSLE32_REG if sbpf_version.enable_jmp32() => { check_jmp_offset(prog, &insn, insn_ptr)?; },
 
                 // BPF_JMP64 class
                 ebpf::JA
@@ -397,7 +421,7 @@ impl Verifier for RequisiteVerifier {
                 | ebpf::JSLT64_IMM
                 | ebpf::JSLT64_REG
                 | ebpf::JSLE64_IMM
-                | ebpf::JSLE64_REG   => { check_jmp_offset(prog, insn_ptr, &program_range)?; },
+                | ebpf::JSLE64_REG   => { check_jmp_offset(prog, &insn, insn_ptr)?; },
                 ebpf::CALL_IMM   => {},
                 ebpf::CALL_REG   => { check_callx_register(&insn, insn_ptr, sbpf_version)?; },
                 ebpf::EXIT       => {},
@@ -413,7 +437,7 @@ impl Verifier for RequisiteVerifier {
         }
 
         // insn_ptr should now be equal to number of instructions.
-        if insn_ptr != prog.len() / ebpf::INSN_SIZE {
+        if insn_ptr != prog.len() {
             return Err(VerifierError::JumpOutOfCode(insn_ptr, insn_ptr));
         }
 
