@@ -4024,3 +4024,32 @@ fn test_direct_stores() {
         );
     }
 }
+
+#[test]
+fn test_err_static_syscall_undefined() {
+    let config = Config {
+        enabled_sbpf_versions: SBPFVersion::V3..=SBPFVersion::V3,
+        ..Config::default()
+    };
+    let source = "
+        add64 r10, 0
+        syscall sol_multi3
+        mov64 r0, 0x0
+        exit";
+
+    let executable =
+        assemble::<TestContextObject>(source, Arc::new(BuiltinProgram::new_loader(config.clone())))
+            .unwrap();
+    let insn = ebpf::get_insn(executable.get_text_bytes().1, 1);
+    assert_eq!(insn.opc, ebpf::CALL_IMM);
+    assert_eq!(insn.src, 0);
+    assert_eq!(insn.imm as u32, ebpf::hash_symbol_name(b"sol_multi3"));
+
+    test_interpreter_and_jit_asm!(
+        source,
+        config,
+        NO_INPUT,
+        TestContextObject::new(2),
+        ProgramResult::Err(EbpfError::UnsupportedInstruction),
+    );
+}
