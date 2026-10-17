@@ -23,7 +23,10 @@ use crate::{
 };
 // Re-export defaults for direct access without the module path.
 pub use defaults::get_stack_frame_size;
-use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, mem::offset_of, ptr};
+use std::{
+    collections::BTreeMap, fmt::Debug, marker::PhantomData, mem::offset_of, ptr,
+    sync::atomic::AtomicBool,
+};
 
 #[cfg(feature = "shuttle-test")]
 use shuttle::sync::Arc;
@@ -260,6 +263,8 @@ pub enum RuntimeEnvironmentSlot {
     StopwatchNumerator = offset_of!(EbpfVm<DummyContextObject>, stopwatch_numerator) as isize,
     /// [EbpfVm::stopwatch_denominator]
     StopwatchDenominator = offset_of!(EbpfVm<DummyContextObject>, stopwatch_denominator) as isize,
+    /// [EbpfVm::kill_switch]
+    KillSwitch = offset_of!(EbpfVm<DummyContextObject>, kill_switch) as isize,
     /// [EbpfVm::registers]
     Registers = offset_of!(EbpfVm<DummyContextObject>, registers) as isize,
     /// [EbpfVm::program_result]
@@ -284,6 +289,7 @@ pub enum RuntimeEnvironmentSlot {
 ///     verifier::RequisiteVerifier,
 ///     vm::{CallFrame, Config, EbpfVm, ExecutionMode},
 /// };
+/// use std::sync::atomic::AtomicBool;
 /// use test_utils::TestContextObject;
 ///
 /// let prog = &[
@@ -314,7 +320,8 @@ pub enum RuntimeEnvironmentSlot {
 ///     MemoryMapping::new(regions, executable.get_config(), sbpf_version).unwrap()
 /// };
 ///
-/// let mut vm = EbpfVm::new(loader, sbpf_version, &mut context_object, stack_len);
+/// let kill_switch = AtomicBool::new(false);
+/// let mut vm = EbpfVm::new(loader, sbpf_version, &mut context_object, &kill_switch, stack_len);
 ///
 /// let mut call_frames = vec![CallFrame::default(); executable.get_config().max_call_depth];
 /// let (instruction_count, result) = vm.execute_program(
@@ -346,6 +353,11 @@ pub struct EbpfVm<'a, C: ContextObject> {
     pub stopwatch_numerator: u64,
     /// Number of times the stop watch was used
     pub stopwatch_denominator: u64,
+    /// Kill switch to abort the VM's execution.
+    ///
+    /// Checked at backward jumps, internal function calls (`call` and `callx`)
+    /// and after syscalls return successfully.
+    pub kill_switch: &'a AtomicBool,
     /// Registers inlined
     pub registers: [u64; 12],
     /// ProgramResult inlined
@@ -370,6 +382,7 @@ impl<'a, C: ContextObject> EbpfVm<'a, C> {
         loader: Arc<BuiltinProgram<C>>,
         sbpf_version: SBPFVersion,
         context_object: &'a mut C,
+        kill_switch: &'a AtomicBool,
         stack_len: usize,
     ) -> Self {
         let config = loader.get_config();
@@ -391,6 +404,7 @@ impl<'a, C: ContextObject> EbpfVm<'a, C> {
             due_insn_count: 0,
             stopwatch_numerator: 0,
             stopwatch_denominator: 0,
+            kill_switch,
             registers,
             program_result: ProgramResult::Ok(0),
             memory_mapping,
@@ -583,7 +597,10 @@ mod tests {
         program::{BuiltinProgram, SBPFVersion},
         vm::{Config, ContextObject, RuntimeEnvironmentSlot},
     };
-    use std::{ptr::NonNull, sync::Arc};
+    use std::{
+        ptr::NonNull,
+        sync::{atomic::AtomicBool, Arc},
+    };
 
     #[test]
     fn test_runtime_environment_slots() {
@@ -603,10 +620,12 @@ mod tests {
         let config = Config::default();
         let mut context_object =
             unsafe { DummyContextObject(MemoryMapping::new(vec![], &config, version).unwrap()) };
+        let kill_switch = AtomicBool::new(false);
         let env = super::EbpfVm::new(
             Arc::new(BuiltinProgram::new_mock()),
             version,
             &mut context_object,
+            &kill_switch,
             4096,
         );
 
@@ -630,6 +649,7 @@ mod tests {
         check_slot!(env, due_insn_count, DueInsnCount);
         check_slot!(env, stopwatch_numerator, StopwatchNumerator);
         check_slot!(env, stopwatch_denominator, StopwatchDenominator);
+        check_slot!(env, kill_switch, KillSwitch);
         check_slot!(env, registers, Registers);
         check_slot!(env, program_result, ProgramResult);
         check_slot!(env, memory_mapping, MemoryMapping);

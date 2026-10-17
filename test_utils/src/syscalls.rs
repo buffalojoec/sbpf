@@ -206,3 +206,21 @@ declare_builtin_function!(
         }
     }
 );
+
+declare_builtin_function!(
+    /// Sets the kill switch of the context object. Returns 0.
+    SyscallKill,
+    fn rust(
+        context_object: &mut TestContextObject,
+        _arg1: u64,
+        _arg2: u64,
+        _arg3: u64,
+        _arg4: u64,
+        _arg5: u64,
+    ) -> Result<u64, Box<dyn std::error::Error>> {
+        context_object
+            .kill_switch
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        Ok(0)
+    }
+);

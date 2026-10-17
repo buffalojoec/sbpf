@@ -4843,3 +4843,170 @@ fn test_max_call_depth_zero() {
         assert_eq!(vm.registers[11], 0);
     }
 }
+
+// Kill Switch
+
+fn set_kill_switch() -> Arc<std::sync::atomic::AtomicBool> {
+    Arc::new(std::sync::atomic::AtomicBool::new(true))
+}
+
+#[test]
+fn test_err_killed_at_backward_jump() {
+    for (sbpf_version, jump) in [
+        // Taken
+        (SBPFVersion::V0, "ja -1"),
+        (SBPFVersion::V0, "jne r0, 0, -1"),
+        (SBPFVersion::V3, "jne r0, 0, -1"),
+        (SBPFVersion::V3, "jne32 r0, 0, -1"),
+        // Not taken
+        (SBPFVersion::V0, "jeq r0, 0, -1"),
+        (SBPFVersion::V3, "jeq32 r0, 0, -1"),
+    ] {
+        let config = Config {
+            enabled_sbpf_versions: sbpf_version..=sbpf_version,
+            ..Config::default()
+        };
+        test_interpreter_and_jit_asm!(
+            &format!(
+                "
+                mov r0, 1
+                {jump}
+                exit"
+            ),
+            config,
+            NO_INPUT,
+            TestContextObject::new(2).with_kill_switch(set_kill_switch()),
+            ProgramResult::Err(EbpfError::Killed),
+        );
+    }
+}
+
+#[test]
+fn test_killed_ignored_by_forward_jumps() {
+    test_interpreter_and_jit_asm!(
+        "
+        mov r0, 1
+        jeq r0, 1, +1
+        mov r0, 2
+        ja +0
+        exit",
+        NO_INPUT,
+        TestContextObject::new(4).with_kill_switch(set_kill_switch()),
+        ProgramResult::Ok(1),
+    );
+}
+
+#[test]
+fn test_err_killed_at_call() {
+    test_interpreter_and_jit_asm!(
+        "
+        mov r0, 1
+        call function_foo
+        exit
+        function_foo:
+        mov r0, 2
+        exit",
+        NO_INPUT,
+        TestContextObject::new(2).with_kill_switch(set_kill_switch()),
+        ProgramResult::Err(EbpfError::Killed),
+    );
+}
+
+#[test]
+fn test_err_killed_at_callx() {
+    test_interpreter_and_jit_asm!(
+        "
+        add64 r10, 0
+        mov64 r0, 0x0
+        mov64 r8, 0x1
+        lsh64 r8, 0x20
+        or64 r8, 0x38
+        callx r8
+        exit
+        function_foo:
+        add64 r10, 0
+        mov64 r0, 0x2A
+        exit",
+        NO_INPUT,
+        TestContextObject::new(6).with_kill_switch(set_kill_switch()),
+        ProgramResult::Err(EbpfError::Killed),
+    );
+}
+
+#[test]
+fn test_err_killed_after_syscall() {
+    test_syscall_asm!(
+        "
+        mov64 r0, 0x7
+        syscall bpf_kill
+        mov64 r0, 0x0
+        exit",
+        NO_INPUT,
+        (
+            "bpf_kill" => syscalls::SyscallKill,
+        ),
+        TestContextObject::new(2),
+        ProgramResult::Err(EbpfError::Killed),
+    );
+}
+
+#[test]
+fn test_err_syscall_error_takes_precedence_over_killed() {
+    test_syscall_asm!(
+        "
+        mov64 r0, 0x7
+        syscall bpf_syscall_err
+        mov64 r0, 0x0
+        exit",
+        NO_INPUT,
+        (
+            "bpf_syscall_err" => SyscallErr,
+        ),
+        TestContextObject::new(2).with_kill_switch(set_kill_switch()),
+        ProgramResult::Err(EbpfError::SyscallError(Box::new(EbpfError::DivideByZero))),
+    );
+}
+
+#[test]
+fn test_err_killed_by_watchdog() {
+    // The instruction count at which the watchdog fires is nondeterministic
+    use solana_sbpf::vm::{CallFrame, ExecutionMode};
+    use std::sync::atomic::Ordering;
+    let config = Config::default();
+    let executable = assemble::<TestContextObject>(
+        "
+        ja -1
+        exit",
+        Arc::new(BuiltinProgram::new_loader(config.clone())),
+    )
+    .unwrap();
+    executable.verify::<RequisiteVerifier>().unwrap();
+    executable.jit_compile().unwrap();
+    for (name, mode) in [
+        ("interpreter", ExecutionMode::Interpreted),
+        ("jit", ExecutionMode::Jit),
+    ] {
+        let mut context_object = TestContextObject::new(u64::MAX);
+        let kill_switch = context_object.kill_switch.clone();
+        create_vm!(
+            vm,
+            &executable,
+            &mut context_object,
+            stack,
+            heap,
+            vec![],
+            None
+        );
+        let mut mode = mode;
+        let mut call_frames = vec![CallFrame::default(); config.max_call_depth];
+        let watchdog = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            kill_switch.store(true, Ordering::Relaxed);
+        });
+        let (_, result) = vm.execute_program(&executable, &mut mode, &mut call_frames);
+        watchdog.join().unwrap();
+        let expected = ProgramResult::Err(EbpfError::Killed);
+        assert_eq!(format!("{result:?}"), format!("{expected:?}"), "{name}");
+        assert_eq!(vm.registers[11], 0, "{name}");
+    }
+}

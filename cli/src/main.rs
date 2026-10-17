@@ -10,7 +10,12 @@ use solana_sbpf::{
     verifier::RequisiteVerifier,
     vm::{CallFrame, Config, DynamicAnalysis, EbpfVm, ExecutionMode},
 };
-use std::{fs::File, io::Read, path::Path, sync::Arc};
+use std::{
+    fs::File,
+    io::Read,
+    path::Path,
+    sync::{atomic::AtomicBool, Arc},
+};
 use test_utils::TestContextObject;
 
 fn main() {
@@ -165,10 +170,12 @@ fn main() {
     context_object.memory_mapping =
         unsafe { MemoryMapping::new(regions, config, sbpf_version).unwrap() };
 
+    let kill_switch = AtomicBool::new(false);
     let mut vm = EbpfVm::new(
         executable.get_loader().clone(),
         executable.get_sbpf_version(),
         &mut context_object,
+        &kill_switch,
         stack_len,
     );
 

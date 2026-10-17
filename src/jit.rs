@@ -151,6 +151,7 @@ const ANCHOR_CALL_UNSUPPORTED_INSTRUCTION: usize = 11;
 const ANCHOR_EXTERNAL_FUNCTION_CALL: usize = 12;
 const ANCHOR_INTERNAL_FUNCTION_CALL_PROLOGUE: usize = 13;
 const ANCHOR_INTERNAL_FUNCTION_CALL_REG: usize = 14;
+const ANCHOR_KILLED: usize = 15;
 const ANCHOR_TRANSLATE_MEMORY_ADDRESS: usize = 21;
 const ANCHOR_COUNT: usize = 34; // Update me when adding or removing anchors
 
@@ -714,7 +715,7 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
 
                 // BPF_JMP64 class
                 ebpf::JA         => {
-                    self.emit_validate_and_profile_instruction_count(target_pc);
+                    self.emit_validate_and_profile_jump(target_pc);
                     let jump_offset = self.relative_to_target_pc(target_pc, 5);
                     self.emit_ins(X86Instruction::jump_immediate(jump_offset));
                 },
@@ -966,6 +967,32 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
     pub fn emit_validate_and_profile_instruction_count(&mut self, target_pc: usize) {
         self.emit_validate_instruction_count(Some(self.pc));
         self.emit_profile_instruction_count(target_pc);
+    }
+
+    /// Checks and charges the instruction meter, but also checks the kill
+    /// switch if jumping backward.
+    pub fn emit_validate_and_profile_jump(&mut self, target_pc: usize) {
+        self.emit_validate_instruction_count(Some(self.pc));
+        if target_pc <= self.pc {
+            self.emit_kill_switch_check(Some(self.pc));
+        }
+        self.emit_profile_instruction_count(target_pc);
+    }
+
+    /// Emits a kill switch check, which throws `EbpfError::Killed` if the
+    /// switch is set.
+    pub fn emit_kill_switch_check(&mut self, pc: Option<usize>) {
+        if pc.is_none() {
+            self.emit_ins(X86Instruction::push(REGISTER_SCRATCH, None));
+        }
+        self.emit_ins(X86Instruction::load(OperandSize::S64, REGISTER_PTR_TO_VM, REGISTER_SCRATCH, X86IndirectAccess::Offset(self.slot_in_vm(RuntimeEnvironmentSlot::KillSwitch)))); // REGISTER_SCRATCH = *KillSwitch;
+        self.emit_ins(X86Instruction::cmp_immediate(OperandSize::S8, REGISTER_SCRATCH, 0, Some(X86IndirectAccess::Offset(0)))); // (*REGISTER_SCRATCH).cmp(0)
+        // Restore REGISTER_SCRATCH without modifying the flags
+        match pc {
+            Some(pc) => self.emit_ins(X86Instruction::load_immediate(REGISTER_SCRATCH, pc as i64)),
+            None => self.emit_ins(X86Instruction::pop(REGISTER_SCRATCH)),
+        }
+        self.emit_ins(X86Instruction::conditional_jump_immediate(0x85, self.relative_to_anchor(ANCHOR_KILLED, 6)));
     }
 
     /// Calls an external Rust function
@@ -1220,7 +1247,7 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
 
     /// Helper for conditional branch instructions without an immediate value
     pub fn emit_conditional_branch_reg(&mut self, size: OperandSize, op: u8, bitwise: bool, first_operand: X86Register, second_operand: X86Register, target_pc: usize) {
-        self.emit_validate_and_profile_instruction_count(target_pc);
+        self.emit_validate_and_profile_jump(target_pc);
         if bitwise { // Logical
             self.emit_ins(X86Instruction::test(size, first_operand, second_operand, None));
         } else { // Arithmetic
@@ -1233,7 +1260,7 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
 
     /// Helper for conditional branch instructions with an immediate value
     pub fn emit_conditional_branch_imm(&mut self, size: OperandSize, op: u8, bitwise: bool, immediate: i64, second_operand: X86Register, target_pc: usize) {
-        self.emit_validate_and_profile_instruction_count(target_pc);
+        self.emit_validate_and_profile_jump(target_pc);
         if self.should_sanitize_constant(immediate) {
             self.emit_sanitized_load_immediate(REGISTER_SCRATCH, immediate);
             if bitwise { // Logical
@@ -1465,6 +1492,11 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
         self.emit_set_exception_kind(EbpfError::CallDepthExceeded);
         self.emit_ins(X86Instruction::jump_immediate(self.relative_to_anchor(ANCHOR_THROW_EXCEPTION, 5)));
 
+        // Handler for EbpfError::Killed
+        self.set_anchor(ANCHOR_KILLED);
+        self.emit_set_exception_kind(EbpfError::Killed);
+        self.emit_ins(X86Instruction::jump_immediate(self.relative_to_anchor(ANCHOR_THROW_EXCEPTION, 5)));
+
         // Handler for EbpfError::CallOutsideTextSegment
         self.set_anchor(ANCHOR_CALL_REG_OUTSIDE_TEXT_SEGMENT);
         self.emit_set_exception_kind(EbpfError::CallOutsideTextSegment);
@@ -1520,6 +1552,7 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
         // Test if result indicates that an error occured
         self.emit_result_is_err();
         self.emit_ins(X86Instruction::conditional_jump_immediate(0x85, self.relative_to_anchor(ANCHOR_THROW_EXCEPTION_UNCHECKED, 6)));
+        self.emit_kill_switch_check(None);
         // Store Ok value in result register
         self.emit_ins(X86Instruction::load(OperandSize::S64, REGISTER_PTR_TO_VM, REGISTER_MAP[0], X86IndirectAccess::Offset(self.slot_in_vm(RuntimeEnvironmentSlot::ProgramResult) + std::mem::size_of::<u64>() as i32)));
         self.emit_ins(X86Instruction::return_near());
@@ -1527,6 +1560,7 @@ impl<'a, C: ContextObject> JitCompiler<'a, C> {
         // Routine for prologue of emit_internal_call()
         self.set_anchor(ANCHOR_INTERNAL_FUNCTION_CALL_PROLOGUE);
         self.emit_validate_instruction_count(None);
+        self.emit_kill_switch_check(None);
         let reserved_space = 8 * SCRATCH_REGS as i32;
         self.emit_ins(X86Instruction::alu_immediate(OperandSize::S64, 0x81, 5, RSP, reserved_space as i64, None)); // alloca
         // We want to save all scratch registers into our caller's stack, which currently contains

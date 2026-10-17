@@ -75,6 +75,9 @@ pub enum EbpfError {
     /// Syscall error
     #[error("Syscall error: {0}")]
     SyscallError(Box<dyn Error>),
+    /// Execution was stopped by the kill switch
+    #[error("execution was killed at BPF instruction")]
+    Killed,
 }
 
 impl EbpfError {

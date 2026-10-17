@@ -19,7 +19,10 @@ use solana_sbpf::{
     static_analysis::RegisterTraceEntry,
     vm::{Config, ContextObject},
 };
-use std::ptr;
+use std::{
+    ptr,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 pub mod syscalls;
 
@@ -29,6 +32,7 @@ pub struct TestContextObject {
     /// Maximal amount of instructions which still can be executed
     pub remaining: u64,
     pub memory_mapping: MemoryMapping,
+    pub kill_switch: Arc<AtomicBool>,
 }
 
 impl Default for TestContextObject {
@@ -39,6 +43,7 @@ impl Default for TestContextObject {
                 MemoryMapping::new(vec![], &Config::default(), SBPFVersion::Reserved)
             }
             .unwrap(),
+            kill_switch: Arc::default(),
         }
     }
 }
@@ -64,6 +69,11 @@ impl TestContextObject {
             remaining,
             ..Default::default()
         }
+    }
+
+    pub fn with_kill_switch(mut self, kill_switch: Arc<AtomicBool>) -> Self {
+        self.kill_switch = kill_switch;
+        self
     }
 }
 
@@ -275,6 +285,8 @@ macro_rules! create_vm {
         );
         let mut $heap = solana_sbpf::aligned_memory::AlignedMemory::with_capacity(0);
         let stack_len = $stack.len();
+        // The VM borrows the switch while also holding `&mut` of the context object
+        let kill_switch = $context_object.kill_switch.clone();
         $context_object.memory_mapping = test_utils::create_memory_mapping(
             $verified_executable,
             &mut $stack,
@@ -288,6 +300,7 @@ macro_rules! create_vm {
             $verified_executable.get_loader().clone(),
             $verified_executable.get_sbpf_version(),
             $context_object,
+            &kill_switch,
             stack_len,
         );
         $vm_name.registers[1] = solana_sbpf::ebpf::MM_INPUT_START;

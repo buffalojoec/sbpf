@@ -19,6 +19,7 @@ use crate::{
     program::BuiltinFunction,
     vm::{CallFrame, Config, ContextObject, EbpfVm},
 };
+use std::sync::atomic::Ordering;
 
 /// Virtual memory operation helper.
 macro_rules! translate_memory_access {
@@ -149,6 +150,9 @@ impl<'a, 'b, 'c, C: ContextObject> Interpreter<'a, 'b, 'c, C> {
     }
 
     fn push_frame(&mut self, config: &Config) -> bool {
+        if self.is_killed() {
+            throw_error!(self, EbpfError::Killed);
+        }
         let frame = &mut self.call_frames[self.vm.call_depth as usize];
         frame.caller_saved_registers.copy_from_slice(
             &self.reg[ebpf::FIRST_SCRATCH_REG..ebpf::FIRST_SCRATCH_REG + ebpf::SCRATCH_REGS],
@@ -176,6 +180,23 @@ impl<'a, 'b, 'c, C: ContextObject> Interpreter<'a, 'b, 'c, C> {
         }
 
         true
+    }
+
+    /// Whether the kill switch was set.
+    fn is_killed(&self) -> bool {
+        self.vm.kill_switch.load(Ordering::Relaxed)
+    }
+
+    /// Whether `insn` is a jump to itself or an earlier instruction
+    fn is_backward_jump(&self, insn: &ebpf::Insn) -> bool {
+        insn.off < 0
+            && match insn.opc & ebpf::BPF_CLS_MASK {
+                ebpf::BPF_JMP64 => {
+                    !matches!(insn.opc, ebpf::CALL_IMM | ebpf::CALL_REG | ebpf::EXIT)
+                }
+                ebpf::BPF_JMP32 => self.executable.get_sbpf_version().enable_jmp32(),
+                _ => false,
+            }
     }
 
     fn sign_extension(&self, value: i32) -> u64 {
@@ -212,6 +233,12 @@ impl<'a, 'b, 'c, C: ContextObject> Interpreter<'a, 'b, 'c, C> {
 
         #[cfg(feature = "tracer")]
         self.vm.register_trace.push(self.reg);
+
+        // The kill switch checks in the iterpreter are designed to mimic the
+        // JIT, so we check the kill switch here only if it's a backwards jump.
+        if self.is_backward_jump(&insn) && self.is_killed() {
+            throw_error!(self, EbpfError::Killed);
+        }
 
         match insn.opc {
             ebpf::LD_DW_IMM if !self.executable.get_sbpf_version().disable_lddw() => {
@@ -570,6 +597,10 @@ impl<'a, 'b, 'c, C: ContextObject> Interpreter<'a, 'b, 'c, C> {
                             ProgramResult::Ok(value) => *value,
                             ProgramResult::Err(_err) => return false,
                         };
+                        // After syscall return, check the kill switch.
+                        if self.is_killed() {
+                            throw_error!(self, EbpfError::Killed);
+                        }
                         resolved = true;
                     }
                 }
