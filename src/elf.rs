@@ -1321,6 +1321,35 @@ pub fn get_sbpf_version(elf_bytes: &[u8]) -> Result<SBPFVersion, ElfParserError>
     })
 }
 
+/// Counts the dynamic relocation table entries that loading the ELF would apply.
+///
+/// Returns zero for SBPF versions with stricter ELF headers, since those are
+/// loaded without relocation. Errors if the ELF cannot be parsed, in which case
+/// loading it fails too.
+pub fn count_dynamic_relocations(elf_bytes: &[u8]) -> Result<usize, ElfError> {
+    with_lenient_elf(elf_bytes, |elf, _elf_bytes| {
+        Ok(elf.dynamic_relocations_table().map_or(0, <[_]>::len))
+    })
+}
+
+/// Parses an ELF that would be loaded by the lenient parser and applies `f`.
+fn with_lenient_elf(
+    elf_bytes: &[u8],
+    f: impl FnOnce(&Elf64, &[u8]) -> Result<usize, ElfError>,
+) -> Result<usize, ElfError> {
+    if get_sbpf_version(elf_bytes)?.enable_stricter_elf_headers() {
+        return Ok(0);
+    }
+    let aligned_memory;
+    let elf_bytes = if is_memory_aligned(elf_bytes.as_ptr() as usize, HOST_ALIGN) {
+        elf_bytes
+    } else {
+        aligned_memory = AlignedMemory::<{ HOST_ALIGN }>::from_slice(elf_bytes);
+        aligned_memory.as_slice()
+    };
+    f(&Elf64::parse(elf_bytes)?, elf_bytes)
+}
+
 /// Creates a [MemoryRegion] for the given [Section]
 pub fn get_ro_region(ro_section: &Section, elf: &[u8]) -> MemoryRegion {
     let (offset, ro_data) = match ro_section {

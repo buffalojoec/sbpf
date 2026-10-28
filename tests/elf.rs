@@ -3,7 +3,7 @@
 use byteorder::{ByteOrder, LittleEndian};
 use solana_sbpf::{
     ebpf,
-    elf::{get_ro_region, ElfError, Executable, Section},
+    elf::{count_dynamic_relocations, get_ro_region, ElfError, Executable, Section},
     elf_parser::{
         consts::{ELFCLASS32, ELFCLASS64, ELFDATA2LSB, ELFDATA2MSB, ELFOSABI_NONE, EM_BPF, ET_REL},
         types::{Elf64Ehdr, Elf64Phdr, Elf64Shdr},
@@ -820,4 +820,41 @@ fn test_long_dynamic_symbol_name() {
         ElfExecutable::load(&elf_bytes, loader_with_labels()),
         "UnknownSymbol"
     );
+}
+
+#[test]
+fn test_count_dynamic_relocations() {
+    for (path, expected) in [
+        ("tests/elfs/relative_call_sbpfv0.so", 0),
+        ("tests/elfs/struct_func_pointer_sbpfv0.so", 0),
+        ("tests/elfs/reloc_64_64_sbpfv0.so", 1),
+        ("tests/elfs/reloc_64_relative_sbpfv0.so", 1),
+        ("tests/elfs/reloc_64_relative_data_sbpfv0.so", 2),
+        ("tests/elfs/syscall_reloc_64_32_sbpfv0.so", 2),
+        ("tests/elfs/long_symbol_name_sbpfv0.so", 4),
+        // Loaded by the strict parser, which does not relocate.
+        ("tests/elfs/strict_header.so", 0),
+        ("tests/elfs/reloc_64_relative.so", 0),
+    ] {
+        let elf_bytes = std::fs::read(path).unwrap();
+        assert_eq!(
+            count_dynamic_relocations(&elf_bytes),
+            Ok(expected),
+            "{path}"
+        );
+    }
+}
+
+#[test]
+fn test_count_dynamic_relocations_unaligned() {
+    let mut elf_bytes = std::fs::read("tests/elfs/syscall_reloc_64_32_sbpfv0.so").unwrap();
+    elf_bytes.insert(0, 0);
+    assert_eq!(count_dynamic_relocations(&elf_bytes[1..]), Ok(2));
+}
+
+#[test]
+fn test_count_dynamic_relocations_invalid_elf() {
+    assert!(count_dynamic_relocations(&[]).is_err());
+    let elf_bytes = std::fs::read("tests/elfs/long_section_name.so").unwrap();
+    assert!(count_dynamic_relocations(&elf_bytes).is_err());
 }
