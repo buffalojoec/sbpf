@@ -3,7 +3,10 @@
 use byteorder::{ByteOrder, LittleEndian};
 use solana_sbpf::{
     ebpf,
-    elf::{count_dynamic_relocations, get_ro_region, ElfError, Executable, Section},
+    elf::{
+        count_dynamic_relocations, count_relative_call_fixups, get_ro_region, ElfError, Executable,
+        Section,
+    },
     elf_parser::{
         consts::{ELFCLASS32, ELFCLASS64, ELFDATA2LSB, ELFDATA2MSB, ELFOSABI_NONE, EM_BPF, ET_REL},
         types::{Elf64Ehdr, Elf64Phdr, Elf64Shdr},
@@ -857,4 +860,53 @@ fn test_count_dynamic_relocations_invalid_elf() {
     assert!(count_dynamic_relocations(&[]).is_err());
     let elf_bytes = std::fs::read("tests/elfs/long_section_name.so").unwrap();
     assert!(count_dynamic_relocations(&elf_bytes).is_err());
+}
+
+#[test]
+fn test_count_relative_call_fixups() {
+    for (path, expected) in [
+        ("tests/elfs/reloc_64_64_sbpfv0.so", 0),
+        // Syscalls (`imm == -1`) are not fixed up.
+        ("tests/elfs/syscall_reloc_64_32_sbpfv0.so", 0),
+        ("tests/elfs/long_symbol_name_sbpfv0.so", 1),
+        ("tests/elfs/relative_call_sbpfv0.so", 2),
+        // Loaded by the strict parser, which does not relocate.
+        ("tests/elfs/strict_header.so", 0),
+        ("tests/elfs/relative_call.so", 0),
+    ] {
+        let elf_bytes = std::fs::read(path).unwrap();
+        assert_eq!(
+            count_relative_call_fixups(&elf_bytes),
+            Ok(expected),
+            "{path}"
+        );
+    }
+
+    // Turning one of the calls into a syscall leaves one fixup.
+    let mut elf_bytes = std::fs::read("tests/elfs/relative_call_sbpfv0.so").unwrap();
+    LittleEndian::write_i32(&mut elf_bytes[0x164..0x168], -1);
+    assert_eq!(count_relative_call_fixups(&elf_bytes), Ok(1));
+}
+
+#[test]
+fn test_count_relative_call_fixups_unaligned() {
+    let mut elf_bytes = std::fs::read("tests/elfs/relative_call_sbpfv0.so").unwrap();
+    elf_bytes.insert(0, 0);
+    assert_eq!(count_relative_call_fixups(&elf_bytes[1..]), Ok(2));
+}
+
+#[test]
+fn test_count_relative_call_fixups_invalid_elf() {
+    assert!(count_relative_call_fixups(&[]).is_err());
+    let elf_bytes = std::fs::read("tests/elfs/long_section_name.so").unwrap();
+    assert!(count_relative_call_fixups(&elf_bytes).is_err());
+
+    // Lenient ELF without a `.text` section.
+    let mut elf_bytes = std::fs::read("tests/elfs/relative_call_sbpfv0.so").unwrap();
+    let text_name_offset = elf_bytes
+        .windows(b".text\0".len())
+        .position(|window| window == b".text\0")
+        .unwrap();
+    elf_bytes[text_name_offset + 1] = b'T';
+    assert_error!(count_relative_call_fixups(&elf_bytes), "SectionNotFound");
 }

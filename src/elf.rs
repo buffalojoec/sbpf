@@ -1339,6 +1339,29 @@ pub fn count_dynamic_relocations(elf_bytes: &[u8]) -> Result<usize, ElfError> {
     })
 }
 
+/// Counts the PC-relative `call` instructions in `.text` that loading the ELF
+/// would rewrite into function registry keys.
+///
+/// Returns zero for SBPF versions with stricter ELF headers, since those are
+/// loaded without relocation. Errors if the ELF cannot be parsed or its `.text`
+/// section cannot be found, in which case loading it fails too.
+pub fn count_relative_call_fixups(elf_bytes: &[u8]) -> Result<usize, ElfError> {
+    with_lenient_elf(elf_bytes, |elf, elf_bytes| {
+        let text_section = get_section(elf, b".text")?;
+        let text_bytes = elf_bytes
+            .get(text_section.file_range().unwrap_or_default())
+            .ok_or(ElfError::ValueOutOfBounds)?;
+        Ok(text_bytes
+            .as_chunks::<{ ebpf::INSN_SIZE }>()
+            .0
+            .iter()
+            .filter(|insn| {
+                is_relative_call_fixup(insn[0], LittleEndian::read_i32(&insn[4..]) as i64)
+            })
+            .count())
+    })
+}
+
 /// Parses an ELF that would be loaded by the lenient parser and applies `f`.
 fn with_lenient_elf(
     elf_bytes: &[u8],
