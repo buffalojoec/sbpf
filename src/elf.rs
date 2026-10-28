@@ -161,6 +161,13 @@ fn get_section(elf: &Elf64, name: &[u8]) -> Result<Elf64Shdr, ElfError> {
     ))
 }
 
+/// Whether the lenient loader rewrites the instruction with `opc` and `imm`, a
+/// PC-relative call, into a function registry key. Calls with `imm == -1` are
+/// left for the dynamic relocations to resolve.
+fn is_relative_call_fixup(opc: u8, imm: i64) -> bool {
+    opc == ebpf::CALL_IMM && imm != -1
+}
+
 // For more information on the BPF instruction set:
 // https://github.com/iovisor/bpf-docs/blob/master/eBPF.md
 
@@ -1037,7 +1044,7 @@ impl<C: ContextObject> Executable<C> {
             .ok_or(ElfError::ValueOutOfBounds)?;
         for i in 0..instruction_count {
             let insn = ebpf::get_insn(text_bytes, i);
-            if insn.opc == ebpf::CALL_IMM && insn.imm != -1 {
+            if is_relative_call_fixup(insn.opc, insn.imm) {
                 let target_pc = (i as isize)
                     .saturating_add(1)
                     .saturating_add(insn.imm as isize);
